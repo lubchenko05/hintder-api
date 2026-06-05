@@ -32,6 +32,13 @@ class UserStorage(BaseStorage):
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def device_has_grant(self, device_id: str) -> bool:
+        """True if any account was already created on this device (claimed the grant)."""
+        stmt = sa.select(sa.exists().where(User.device_id == device_id))
+        async with self._session() as session:
+            result = await session.execute(stmt)
+            return bool(result.scalar())
+
     async def create(
         self,
         user_id: str,
@@ -40,6 +47,7 @@ class UserStorage(BaseStorage):
         name: str | None = None,
         avatar: str | None = None,
         free_hints: int = 3,
+        device_id: str | None = None,
     ) -> User:
         """Insert a new user with the given starter free-hint grant."""
         async with self._begin() as session:
@@ -50,6 +58,7 @@ class UserStorage(BaseStorage):
                 avatar=avatar,
                 free_hints=free_hints,
                 paid_hints=0,
+                device_id=device_id,
             )
             session.add(user)
             await session.flush()

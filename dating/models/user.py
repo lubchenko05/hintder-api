@@ -59,6 +59,11 @@ class User(Base):
         sa.String(255), nullable=True, index=True
     )
 
+    # Anti-abuse: the device/browser that first created an account here. Free
+    # hints are granted once per device, so logging out and bootstrapping a fresh
+    # anonymous account on the same device doesn't re-grant them.
+    device_id: Mapped[str | None] = mapped_column(sa.String(64), nullable=True, index=True)
+
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(), nullable=False, index=True, default=utcnow
     )

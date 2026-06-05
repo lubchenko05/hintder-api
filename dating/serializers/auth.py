@@ -8,6 +8,9 @@ class FirebaseTokenValidator(BaseValidator):
     """``POST /auth/firebase`` body — a Firebase ID token from the client SDK."""
 
     token: NonEmptyStr
+    # Stable per-browser id (localStorage) so free hints are granted once per
+    # device, not once per (re-creatable) anonymous account.
+    device_id: str | None = None
 
 
 class JWTTokenSerializer(BaseSerializer):

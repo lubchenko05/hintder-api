@@ -21,6 +21,8 @@ async def firebase_login(
     db: DBStorage = Depends(get_db_storage),
 ) -> JWTTokenSerializer:
     """Exchange a Firebase ID token for a backend JWT (creates the user if new)."""
-    user = await bl_auth.verify_firebase_token_and_upsert_user(db, payload.token)
+    user = await bl_auth.verify_firebase_token_and_upsert_user(
+        db, payload.token, device_id=payload.device_id
+    )
     access_token = generate_jwt_for_user(user.id, user.email)
     return JWTTokenSerializer(access_token=access_token)
