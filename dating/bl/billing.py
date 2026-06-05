@@ -311,3 +311,23 @@ async def reattach_subscription(db: DBStorage, *, sub_id: str, to_user_id: str) 
     if from_user_id is not None and from_user_id != to_user_id:
         await db.hint.transfer_balance(from_user_id=from_user_id, to_user_id=to_user_id)
     await db.subscription.relink(sub_id=sub_id, from_user_id=from_user_id, to_user_id=to_user_id)
+
+
+async def claim_anonymous_assets(db: DBStorage, *, prev_user_id: str, to_user_id: str) -> None:
+    """Bring a just-abandoned account's subscription + hints to the signed-in user.
+
+    For the "pay anonymously, sign in after" flow: if the post-payment sign-in
+    fell back to an existing account (the Firebase uid changed), the purchase
+    lives on the old anonymous uid — move it over. No-op when the uids match
+    (linking preserved the uid) or the donor is gone / has nothing to give.
+    """
+    if prev_user_id == to_user_id:
+        return
+    prev = await db.user.get_by_id(prev_user_id)
+    if prev is None:
+        return
+    if prev.subscription_id:
+        # Moves the subscription FK AND the donor's hint balance.
+        await reattach_subscription(db, sub_id=prev.subscription_id, to_user_id=to_user_id)
+    elif prev.total_hints > 0:
+        await db.hint.transfer_balance(from_user_id=prev_user_id, to_user_id=to_user_id)

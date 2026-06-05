@@ -26,7 +26,8 @@ def _render_email(link: str) -> str:
           <tr><td style="padding:36px 36px 8px 36px;">
             <div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;
                         font-weight:bold;color:#ffffff;letter-spacing:-0.3px;">
-              <span style="color:#FF4D6D;">&#9670;</span>&nbsp;hintder
+              <img src="https://hintder.ai/icon-192.png" width="22" height="22" alt="hintder"
+                   style="vertical-align:middle;border-radius:6px;"/>&nbsp;hintder
             </div>
           </td></tr>
           <tr><td style="padding:20px 36px 0 36px;">

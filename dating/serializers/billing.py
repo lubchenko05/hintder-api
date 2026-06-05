@@ -7,6 +7,12 @@ from dating.serializers.hints import HintBalanceSerializer
 from dating.validators import NonEmptyStr
 
 
+class ClaimAssetsValidator(BaseValidator):
+    """``POST /me/claim`` body — the previous (anonymous) account's backend JWT."""
+
+    prev_token: NonEmptyStr
+
+
 class HintPackSerializer(BaseSerializer):
     """A purchasable hint pack for the pricing UI."""
 
