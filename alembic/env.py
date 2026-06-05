@@ -15,7 +15,11 @@ from dating.models import Base
 app_config = get_config()
 
 config = context.config
-config.set_main_option("sqlalchemy.url", app_config.db_url)
+# Escape ``%`` as ``%%``: the URL-encoded DB password (quote_plus) contains
+# ``%XX`` sequences, and Alembic stores this via ConfigParser, which treats a
+# lone ``%`` as interpolation syntax and raises. ConfigParser un-escapes
+# ``%%`` -> ``%`` on read, so the engine still gets the correct URL.
+config.set_main_option("sqlalchemy.url", app_config.db_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
