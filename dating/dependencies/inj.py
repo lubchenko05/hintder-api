@@ -11,6 +11,7 @@ from fastapi import Request
 
 if TYPE_CHECKING:
     from dating.services.ai import AIClient
+    from dating.services.email import EmailService
     from dating.services.paddle import PaddleService
     from dating.services.storage import StorageService
     from dating.storages import DBStorage
@@ -45,3 +46,8 @@ def get_paddle_service(request: Request) -> "PaddleService":
 def get_storage_service(request: Request) -> "StorageService":
     """Return the screenshot storage service."""
     return _inj(request, "storage")
+
+
+def get_email_service(request: Request) -> "EmailService":
+    """Return the transactional email service (Brevo)."""
+    return _inj(request, "email")

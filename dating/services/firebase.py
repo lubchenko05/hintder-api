@@ -55,3 +55,15 @@ def verify_id_token(token: str) -> dict[str, Any]:
         raise UnauthorizedException(f"Invalid Firebase token: {exc}") from exc
     except Exception as exc:
         raise UnauthorizedException(f"Token verification failed: {exc}") from exc
+
+
+def generate_email_sign_in_link(email: str, continue_url: str) -> str:
+    """Mint a passwordless email sign-in link for ``email`` (handled in-app).
+
+    Requires the Email-link sign-in provider to be enabled for the project and
+    ``continue_url``'s domain to be in the authorised domains list. We send this
+    link ourselves (branded email) instead of letting Firebase mail it.
+    """
+    _get_firebase_app()
+    settings = firebase_auth.ActionCodeSettings(url=continue_url, handle_code_in_app=True)
+    return firebase_auth.generate_sign_in_with_email_link(email, action_code_settings=settings)

@@ -95,12 +95,14 @@ class App:
         phase without disturbing the data layer.
         """
         from dating.services.ai import build_ai_client
+        from dating.services.email import EmailService
         from dating.services.paddle import PaddleService
         from dating.services.storage import StorageService
 
         self.inj["ai"] = build_ai_client(self.cfg)
         self.inj["paddle"] = PaddleService(self.cfg)
         self.inj["storage"] = StorageService(self.cfg)
+        self.inj["email"] = EmailService(self.cfg)
 
     async def close(self) -> None:
         """Dispose the DB engine and any other closable resources."""

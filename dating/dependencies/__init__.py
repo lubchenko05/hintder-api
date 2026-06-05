@@ -16,6 +16,7 @@ from dating.dependencies.inj import (
     get_ai_client,
     get_db_session,
     get_db_storage,
+    get_email_service,
     get_paddle_service,
     get_storage_service,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "get_ai_client",
     "get_paddle_service",
     "get_storage_service",
+    "get_email_service",
     "on_startup",
     "on_shutdown",
     "Paginator",

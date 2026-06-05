@@ -111,6 +111,11 @@ class Config(BaseSettings):
     # 14 days. Keep this in sync with every "refund within N days" string.
     refund_window_days: int = 14
 
+    # Transactional email (Brevo API) — auth magic links sent from our domain.
+    brevo_api_key: str = ""
+    brevo_from_email: str = "noreply@hintder.ai"
+    brevo_from_name: str = "hintder"
+
     @model_validator(mode="before")
     @classmethod
     def load_from_env_and_secret_manager(cls, data: dict[str, Any]) -> dict[str, Any]:
@@ -138,6 +143,8 @@ class Config(BaseSettings):
             "paddle_api_key",
             "paddle_webhook_secret",
             "paddle_environment",
+            "brevo_api_key",
+            "brevo_from_email",
         ]
         for secret_name in secrets_to_load:
             if data.get(secret_name) is not None and secret_name in data:
@@ -165,6 +172,11 @@ class Config(BaseSettings):
     def paddle_enabled(self) -> bool:
         """True once a real Paddle API key is configured."""
         return bool(self.paddle_api_key)
+
+    @property
+    def brevo_enabled(self) -> bool:
+        """True once a Brevo API key is configured (transactional email)."""
+        return bool(self.brevo_api_key)
 
     def get_db_url(self, driver: str) -> str:
         """Build a SQLAlchemy URL for the given driver (``asyncpg``/``psycopg2``)."""

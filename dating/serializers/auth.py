@@ -1,5 +1,7 @@
 """Auth endpoint request validators + response serializers."""
 
+from pydantic import EmailStr
+
 from dating.serializers.base import BaseSerializer, BaseValidator
 from dating.validators import NonEmptyStr
 
@@ -11,6 +13,13 @@ class FirebaseTokenValidator(BaseValidator):
     # Stable per-browser id (localStorage) so free hints are granted once per
     # device, not once per (re-creatable) anonymous account.
     device_id: str | None = None
+
+
+class EmailLinkValidator(BaseValidator):
+    """``POST /auth/email-link`` body — send a passwordless sign-in link."""
+
+    email: EmailStr
+    continue_url: NonEmptyStr
 
 
 class JWTTokenSerializer(BaseSerializer):
