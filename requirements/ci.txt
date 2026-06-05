@@ -1,0 +1,28 @@
+-r prod.txt
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.3
+pytest-xdist>=3.5.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+httpx>=0.27.0
+
+# Format / lint
+# setuptools provides ``pkg_resources``, which flake8-logging-format imports
+# at plugin-load time. Python 3.12 no longer ships it by default.
+setuptools>=68.0.0
+black>=24.0.0
+isort>=5.13.0
+autoflake>=2.3.0
+flake8>=7.0.0
+flake8-bugbear>=24.0.0
+flake8-quotes>=3.4.0
+flake8-tidy-imports>=4.10.0
+flake8-logging-format>=2024.24.12
+flake8-docstrings>=1.7.0
+mypy>=1.13.0
+
+# Types
+types-python-dateutil>=2.8.19
+sqlalchemy[mypy]>=2.0

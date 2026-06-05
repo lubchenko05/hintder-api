@@ -1,0 +1,5 @@
+-r ci.txt
+
+# Local dev conveniences
+ipython>=8.0.0
+watchfiles>=0.21.0
