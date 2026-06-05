@@ -104,10 +104,32 @@ class StorageService:
             logger.exception("Signing screenshot URLs failed for user %s", user_id)
             return []
 
+    def _signing_kwargs(self) -> dict[str, Any]:
+        """Extra ``generate_signed_url`` kwargs so V4 signing works on Cloud Run.
+
+        With a local key file (``storage_credentials_file``) the blob signs
+        itself. Under Application Default Credentials (the Cloud Run runtime SA,
+        which has no private key) we sign through the IAM ``signBlob`` API by
+        passing the SA email + a fresh access token — this needs the runtime SA
+        to hold ``roles/iam.serviceAccountTokenCreator`` on itself.
+        """
+        if self._cfg.storage_credentials_file:
+            return {}
+        import google.auth
+        import google.auth.transport.requests
+
+        credentials, _ = google.auth.default()
+        credentials.refresh(google.auth.transport.requests.Request())
+        email = getattr(credentials, "service_account_email", None)
+        if not email:
+            return {}
+        return {"service_account_email": email, "access_token": credentials.token}
+
     def _sign(self, user_id: str, uris: list[str]) -> list[str]:
         """Blocking V4 signing of up to 6 of the user's own ``gs://`` URIs."""
         bucket = self._bucket()
         prefix = f"gs://{bucket.name}/{self._cfg.storage_prefix}/{user_id}/"
+        sign_kwargs = self._signing_kwargs()
         signed: list[str] = []
         for uri in uris[:6]:
             if not uri.startswith(prefix):
@@ -115,6 +137,11 @@ class StorageService:
             blob_name = uri[len(f"gs://{bucket.name}/") :]
             blob = bucket.blob(blob_name)
             signed.append(
-                blob.generate_signed_url(version="v4", expiration=SIGNED_URL_TTL, method="GET")
+                blob.generate_signed_url(
+                    version="v4",
+                    expiration=SIGNED_URL_TTL,
+                    method="GET",
+                    **sign_kwargs,
+                )
             )
         return signed
