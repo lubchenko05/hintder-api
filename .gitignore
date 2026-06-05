@@ -1,4 +1,34 @@
-# Python
+# ── Secrets — defense in depth ────────────────────────────────────────────
+# Everything in secrets/ is ignored EXCEPT the committed *.example template.
+# NOTE: we ignore the dir *contents* (secrets/*), not the dir itself (secrets/);
+# git can't re-include a file whose parent dir is excluded, so the trailing-slash
+# form would silently swallow the !negation below.
+# We ALSO match secret file *types* anywhere in the tree, so a key dropped in
+# the wrong folder can never be committed by accident.
+secrets/*
+!secrets/local.env.example
+
+# Service-account / credential JSON (Firebase, Vertex, GCS, admin SDK, …)
+*-sa.json
+*service-account*.json
+*-firebase.json
+*credentials*.json
+*-adminsdk-*.json
+
+# Env files (but keep committed *.example templates)
+.env
+.env.*
+*.env
+!*.env.example
+!.env.example
+
+# Keys / certs
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Python ─────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -13,11 +43,7 @@ venv/
 .coverage
 htmlcov/
 
-# Secrets
-secrets/
-!secrets/local.env.example
-
-# IDE / OS
+# ── IDE / OS ───────────────────────────────────────────────────────────────
 .idea/
 .vscode/
 .DS_Store

@@ -1,0 +1,138 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  PROJECT_ID: hintder-ai
+  REGION: us-central1
+  ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
+  SERVICE_ACCOUNT: hintder-api@hintder-ai.iam.gserviceaccount.com
+  VPC_CONNECTOR: hintder-connector
+  # Non-secret runtime config. The real secrets (POSTGRES_PASSWORD,
+  # POSTGRES_HOST, SECRET_KEY, JWT_SECRET_KEY) are NOT here — the app resolves
+  # them from Secret Manager at startup (GOOGLE_CLOUD_PROJECT must be set).
+  # Empty *_CREDENTIALS_FILE values force the Admin/Vertex/Storage SDKs onto
+  # the Cloud Run runtime service account (Application Default Credentials).
+  # DB_POOL_SIZE/OVERFLOW are capped so 4 instances peak at ~20 connections,
+  # safe for a small Cloud SQL tier. Adjust POSTGRES_DB/USER if your instance
+  # uses different names.
+  RUNTIME_ENV: >-
+    ENV=prod,
+    GOOGLE_CLOUD_PROJECT=hintder-ai,
+    FRONTEND_BASE_URL=https://hintder.ai,
+    BACKEND_BASE_URL=https://api.hintder.ai,
+    POSTGRES_DB=dating,
+    POSTGRES_USER=dating,
+    POSTGRES_PORT=5432,
+    DB_POOL_SIZE=3,
+    DB_MAX_OVERFLOW=2,
+    FIREBASE_PROJECT_ID=hintder-ai,
+    FIREBASE_CREDENTIALS_FILE=,
+    STORAGE_BUCKET=dating-client-storage-30d,
+    STORAGE_CREDENTIALS_FILE=,
+    AI_USE_VERTEX=true,
+    AI_VERTEX_PROJECT=hintder-ai,
+    AI_VERTEX_LOCATION=global,
+    AI_VERTEX_CREDENTIALS_FILE=,
+    PADDLE_ENVIRONMENT=sandbox
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/hintder/hintder-api:${{ steps.version.outputs.VERSION }} \
+            -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/hintder/hintder-api:latest \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/hintder/hintder-api:${{ steps.version.outputs.VERSION }}
+          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/hintder/hintder-api:latest
+
+      - name: Run database migrations
+        run: |
+          # Normalise the multiline RUNTIME_ENV into a single comma list.
+          ENV_VARS=$(echo "${{ env.RUNTIME_ENV }}" | tr -d '[:space:]')
+
+          gcloud run jobs deploy hintder-migrations \
+            --image ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/hintder/hintder-api:${{ steps.version.outputs.VERSION }} \
+            --region ${{ env.REGION }} \
+            --memory 512Mi \
+            --cpu 1 \
+            --max-retries 1 \
+            --task-timeout 300 \
+            --set-env-vars "$ENV_VARS" \
+            --vpc-connector ${{ env.VPC_CONNECTOR }} \
+            --vpc-egress private-ranges-only \
+            --service-account ${{ env.SERVICE_ACCOUNT }} \
+            --command "alembic" \
+            --args "upgrade,head" \
+            --quiet
+
+          echo "🔄 Running database migrations..."
+          gcloud run jobs execute hintder-migrations \
+            --region ${{ env.REGION }} \
+            --wait \
+            --quiet
+          echo "✅ Migrations completed"
+
+      - name: Deploy API to Cloud Run
+        run: |
+          ENV_VARS=$(echo "${{ env.RUNTIME_ENV }}" | tr -d '[:space:]')
+
+          gcloud run deploy hintder-api \
+            --image ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/hintder/hintder-api:${{ steps.version.outputs.VERSION }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 4 \
+            --concurrency 80 \
+            --timeout 300 \
+            --cpu-boost \
+            --set-env-vars "$ENV_VARS" \
+            --vpc-connector ${{ env.VPC_CONNECTOR }} \
+            --vpc-egress private-ranges-only \
+            --service-account ${{ env.SERVICE_ACCOUNT }} \
+            --quiet
+
+      - name: Show deployment URL
+        run: |
+          echo "✅ Deployed version ${{ steps.version.outputs.VERSION }}"
+          echo "API URL:"
+          gcloud run services describe hintder-api \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)'

@@ -1,0 +1,31 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: make install-dev
+
+      - name: Lint (mypy + isort + black + flake8)
+        run: make lint
+
+      - name: Tests
+        run: make test
+
+      - name: Build Docker image (test)
+        run: docker build -t hintder-api-test .
