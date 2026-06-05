@@ -49,3 +49,6 @@ class MatchSerializer(BaseSerializer):
     pickedTone: str | None
     createdAt: int
     updatedAt: int
+    # Ready-to-display signed view URLs for the stored screenshots, computed on
+    # read (the canonical gs:// URIs stay in ``analysis``). Empty if none/unsigned.
+    imageUrls: list[str] = []
