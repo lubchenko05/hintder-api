@@ -37,7 +37,7 @@ env:
     AI_VERTEX_PROJECT=hintder-ai,
     AI_VERTEX_LOCATION=global,
     AI_VERTEX_CREDENTIALS_FILE=,
-    PADDLE_ENVIRONMENT=sandbox
+    PADDLE_ENVIRONMENT=production
 
 jobs:
   deploy:
