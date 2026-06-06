@@ -339,19 +339,44 @@ async def reattach_subscription(db: DBStorage, *, sub_id: str, to_user_id: str) 
 
 
 async def claim_anonymous_assets(db: DBStorage, *, prev_user_id: str, to_user_id: str) -> None:
-    """Bring a just-abandoned account's subscription + hints to the signed-in user.
+    """Bring a just-abandoned ANONYMOUS account's subscription + hints to a user.
 
     For the "pay anonymously, sign in after" flow: if the post-payment sign-in
     fell back to an existing account (the Firebase uid changed), the purchase
-    lives on the old anonymous uid — move it over. No-op when the uids match
-    (linking preserved the uid) or the donor is gone / has nothing to give.
+    lives on the old anonymous uid — move it over.
+
+    Hardened (frontend-triggered, so it must be defensive):
+
+    * **Donor must be anonymous** — an anonymous-origin account never has an
+      email (Google / email-link always carry one). A permanent account can
+      therefore never be drained via this endpoint, which both blocks
+      subscription theft AND makes the claim effectively one-shot: once a
+      subscription lands on a permanent account it can never be a donor again.
+    * **Recipient must not already have a live subscription** — we never
+      overwrite or double up an account that is already paying.
+
+    No-op when the uids match (linking preserved the uid), the donor is gone /
+    permanent, the recipient already pays, or there's nothing to give.
     """
     if prev_user_id == to_user_id:
         return
     prev = await db.user.get_by_id(prev_user_id)
     if prev is None:
         return
+    # SECURITY: only an anonymous-origin donor (no email) may be claimed from.
+    if prev.email is not None:
+        logger.warning("claim refused: donor %s is a permanent account (has email)", prev_user_id)
+        return
+    recipient = await db.user.get_by_id(to_user_id)
+    if recipient is None:
+        return
     if prev.subscription_id:
+        # Never move a subscription onto an account that already has a live one.
+        if await current_subscription(db, recipient) is not None:
+            logger.warning(
+                "claim refused: recipient %s already has a live subscription", to_user_id
+            )
+            return
         # Moves the subscription FK AND the donor's hint balance.
         await reattach_subscription(db, sub_id=prev.subscription_id, to_user_id=to_user_id)
     elif prev.total_hints > 0:
