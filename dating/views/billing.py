@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Response, status
 
 from dating.bl import billing as bl_billing, plans as bl_plans
 from dating.bl.plans import get_plan_or_error, TIER_RANK
+from dating.config import get_config
 from dating.dependencies import get_current_user, get_db_storage, get_paddle_service
 from dating.models.user import User
 from dating.serializers.billing import (
@@ -30,7 +31,13 @@ router = APIRouter()
 @router.get("/billing/plans", response_model=list[PlanSerializer], tags=["billing"])
 async def list_plans() -> list[PlanSerializer]:
     """Return the subscription plan catalogue (public — no auth required)."""
-    return [PlanSerializer.model_validate(p) for p in bl_plans.PLANS]
+    price_map = get_config().paddle_price_map
+    plans = []
+    for p in bl_plans.PLANS:
+        s = PlanSerializer.model_validate(p)
+        s.paddle_price_id = price_map.get(p.id)
+        plans.append(s)
+    return plans
 
 
 @router.get("/billing/packs", response_model=list[HintPackSerializer], tags=["billing"])

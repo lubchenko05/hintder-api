@@ -116,6 +116,11 @@ class Config(BaseSettings):
     brevo_from_email: str = "noreply@hintder.ai"
     brevo_from_name: str = "hintder"
 
+    # Paddle price IDs — JSON map {plan_id: paddle_price_id}, e.g.
+    # {"plus_month":"pri_...","plus_year":"pri_..."}. Public (the client uses
+    # them too), so set as a plain env var in deploy.yml, not Secret Manager.
+    paddle_price_ids: str = ""
+
     @model_validator(mode="before")
     @classmethod
     def load_from_env_and_secret_manager(cls, data: dict[str, Any]) -> dict[str, Any]:
@@ -143,6 +148,7 @@ class Config(BaseSettings):
             "paddle_api_key",
             "paddle_webhook_secret",
             "paddle_environment",
+            "paddle_price_ids",
             "brevo_api_key",
             "brevo_from_email",
         ]
@@ -177,6 +183,26 @@ class Config(BaseSettings):
     def brevo_enabled(self) -> bool:
         """True once a Brevo API key is configured (transactional email)."""
         return bool(self.brevo_api_key)
+
+    @property
+    def paddle_price_map(self) -> dict[str, str]:
+        """Parsed plan_id → paddle price_id map (empty dict on missing/bad JSON)."""
+        import json
+
+        if not self.paddle_price_ids:
+            return {}
+        try:
+            data = json.loads(self.paddle_price_ids)
+        except Exception:
+            return {}
+        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+    def plan_id_for_price(self, price_id: str) -> str | None:
+        """Reverse lookup: paddle price_id → our plan_id (for webhook resolution)."""
+        for plan_id, pid in self.paddle_price_map.items():
+            if pid == price_id:
+                return plan_id
+        return None
 
     def get_db_url(self, driver: str) -> str:
         """Build a SQLAlchemy URL for the given driver (``asyncpg``/``psycopg2``)."""

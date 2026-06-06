@@ -61,6 +61,8 @@ class PlanSerializer(BaseSerializer):
     price_usd: float
     hints_per_cycle: int
     is_unlimited: bool
+    # Paddle price id the client opens checkout with (None until configured).
+    paddle_price_id: str | None = None
 
 
 class SubscribeValidator(BaseValidator):

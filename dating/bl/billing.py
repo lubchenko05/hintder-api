@@ -17,6 +17,7 @@ from dating.config import get_config
 from dating.models.subscription import (
     INTERVAL_YEAR,
     SUB_ACTIVE,
+    SUB_CANCELED,
     SUB_PENDING,
     Subscription,
 )
@@ -331,3 +332,42 @@ async def claim_anonymous_assets(db: DBStorage, *, prev_user_id: str, to_user_id
         await reattach_subscription(db, sub_id=prev.subscription_id, to_user_id=to_user_id)
     elif prev.total_hints > 0:
         await db.hint.transfer_balance(from_user_id=prev_user_id, to_user_id=to_user_id)
+
+
+async def activate_subscription_from_webhook(
+    db: DBStorage,
+    *,
+    paddle_subscription_id: str,
+    user_id: str,
+    plan_id: str,
+    paddle_customer_id: str | None = None,
+) -> None:
+    """Create-or-get the user's subscription for a Paddle event and activate it.
+
+    The real (overlay) flow has no pending row pre-staged — the
+    ``subscription.activated`` webhook is the first the backend hears of it, so we
+    create the row here from the resolved plan, then activate (grants cycle one).
+    Idempotent: a re-delivered event finds the active sub and no-ops.
+    """
+    plan = get_plan_or_error(plan_id)
+    sub = await db.subscription.get_by_paddle_id(paddle_subscription_id)
+    if sub is None:
+        sub = await db.subscription.create_for_user(
+            user_id=user_id,
+            paddle_subscription_id=paddle_subscription_id,
+            tier=plan.tier,
+            billing_interval=plan.billing_interval,
+            hints_per_cycle=plan.hints_per_cycle,
+            cap=_cap_for(plan),
+            is_unlimited=plan.is_unlimited,
+            status=SUB_PENDING,
+            paddle_customer_id=paddle_customer_id,
+        )
+    await _activate_subscription(db, sub, user_id)
+
+
+async def cancel_subscription_from_webhook(db: DBStorage, *, paddle_subscription_id: str) -> None:
+    """Mark a subscription canceled when Paddle reports it fully ended."""
+    sub = await db.subscription.get_by_paddle_id(paddle_subscription_id)
+    if sub is not None:
+        await db.subscription.update_fields(sub.id, status=SUB_CANCELED)
