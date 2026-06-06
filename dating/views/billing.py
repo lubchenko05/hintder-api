@@ -122,6 +122,7 @@ async def change_plan(
     payload: ChangePlanValidator,
     user: User = Depends(get_current_user),
     db: DBStorage = Depends(get_db_storage),
+    paddle: PaddleService = Depends(get_paddle_service),
 ) -> SubscriptionSerializer:
     """Upgrade (immediate + delta hints) or downgrade/switch (scheduled for next cycle).
 
@@ -139,9 +140,13 @@ async def change_plan(
     is_upgrade = new_rank > cur_rank
 
     if is_upgrade:
-        await bl_billing.upgrade_subscription(db, user=user, new_plan_id=payload.plan_id)
+        await bl_billing.upgrade_subscription(
+            db, user=user, new_plan_id=payload.plan_id, paddle=paddle
+        )
     else:
-        await bl_billing.downgrade_subscription(db, user=user, new_plan_id=payload.plan_id)
+        await bl_billing.downgrade_subscription(
+            db, user=user, new_plan_id=payload.plan_id, paddle=paddle
+        )
 
     refreshed_sub = await bl_billing.current_subscription(db, user)
     assert refreshed_sub is not None
@@ -152,7 +157,8 @@ async def change_plan(
 async def cancel_subscription(
     user: User = Depends(get_current_user),
     db: DBStorage = Depends(get_db_storage),
+    paddle: PaddleService = Depends(get_paddle_service),
 ) -> SubscriptionSerializer:
     """Schedule cancellation at period end (keeps hints, plan active until then)."""
-    sub = await bl_billing.cancel_subscription(db, user)
+    sub = await bl_billing.cancel_subscription(db, user, paddle)
     return SubscriptionSerializer.model_validate(sub)

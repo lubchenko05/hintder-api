@@ -13,6 +13,7 @@ import hmac
 import logging
 import uuid
 
+import httpx
 from pydantic import BaseModel
 
 from dating.config import Config
@@ -116,3 +117,54 @@ class PaddleService:
         except Exception:
             logger.exception("Failed to verify Paddle signature")
             return False
+
+    def _api_base(self) -> str:
+        """Paddle REST base for the configured environment."""
+        if self._cfg.paddle_environment == "production":
+            return "https://api.paddle.com"
+        return "https://sandbox-api.paddle.com"
+
+    async def _request(self, method: str, path: str, body: dict) -> bool:
+        """Make an authed Paddle REST call; return whether it succeeded."""
+        if not self.enabled:
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.request(
+                    method,
+                    f"{self._api_base()}{path}",
+                    json=body,
+                    headers={
+                        "Authorization": f"Bearer {self._cfg.paddle_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
+            if resp.status_code in (200, 201):
+                return True
+            logger.error("Paddle %s %s -> %s: %s", method, path, resp.status_code, resp.text[:400])
+            return False
+        except Exception:
+            logger.exception("Paddle API call failed: %s %s", method, path)
+            return False
+
+    async def cancel_subscription(self, paddle_subscription_id: str) -> bool:
+        """Cancel a subscription at the end of the current billing period."""
+        return await self._request(
+            "POST",
+            f"/subscriptions/{paddle_subscription_id}/cancel",
+            {"effective_from": "next_billing_period"},
+        )
+
+    async def change_subscription_price(
+        self, paddle_subscription_id: str, new_price_id: str, *, immediate: bool
+    ) -> bool:
+        """Swap a subscription to a new price; prorate now (upgrade) or next cycle."""
+        mode = "prorated_immediately" if immediate else "full_next_billing_period"
+        return await self._request(
+            "PATCH",
+            f"/subscriptions/{paddle_subscription_id}",
+            {
+                "items": [{"price_id": new_price_id, "quantity": 1}],
+                "proration_billing_mode": mode,
+            },
+        )

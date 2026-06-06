@@ -222,7 +222,24 @@ async def current_subscription(db: DBStorage, user: User) -> Subscription | None
     return sub
 
 
-async def upgrade_subscription(db: DBStorage, *, user: User, new_plan_id: str) -> User:
+async def _push_plan_change_to_paddle(
+    paddle: PaddleService, sub: Subscription, new_plan_id: str, *, immediate: bool
+) -> None:
+    """When Paddle is live, change the real subscription's price (raises on failure)."""
+    if not paddle.enabled:
+        return
+    price_id = get_config().paddle_price_map.get(new_plan_id)
+    if not price_id:
+        raise BadRequestException("Plan isn't available for billing")
+    if not await paddle.change_subscription_price(
+        sub.paddle_subscription_id, price_id, immediate=immediate
+    ):
+        raise BadRequestException("Couldn't change your plan with the payment provider — try again")
+
+
+async def upgrade_subscription(
+    db: DBStorage, *, user: User, new_plan_id: str, paddle: PaddleService
+) -> User:
     """Upgrade to a higher tier immediately, topping the balance up to the new plan.
 
     Sets ``sub_hints`` to ``max(current, new_allotment)`` — so upgrading gives the
@@ -236,6 +253,7 @@ async def upgrade_subscription(db: DBStorage, *, user: User, new_plan_id: str) -
         raise BadRequestException("No active subscription to upgrade")
     new_plan = get_plan_or_error(new_plan_id)
     new_cap = _cap_for(new_plan)
+    await _push_plan_change_to_paddle(paddle, sub, new_plan_id, immediate=True)
     await db.subscription.update_fields(
         sub.id,
         tier=new_plan.tier,
@@ -258,17 +276,21 @@ async def upgrade_subscription(db: DBStorage, *, user: User, new_plan_id: str) -
     return await db.user.get_by_id_or_error(user.id)
 
 
-async def downgrade_subscription(db: DBStorage, *, user: User, new_plan_id: str) -> Subscription:
+async def downgrade_subscription(
+    db: DBStorage, *, user: User, new_plan_id: str, paddle: PaddleService
+) -> Subscription:
     """Switch to a lower (or same-rank) plan immediately, keeping hints.
 
     The new tier applies right away so the UI reflects it, but we do NOT subtract
     hints — the user keeps their current balance. The lower allotment + cap take
-    effect for future cycles. Returns the updated subscription.
+    effect for future cycles. In Paddle, the price change applies next billing
+    period (no immediate proration). Returns the updated subscription.
     """
     sub = await current_subscription(db, user)
     if sub is None:
         raise BadRequestException("No active subscription to change")
     new_plan = get_plan_or_error(new_plan_id)
+    await _push_plan_change_to_paddle(paddle, sub, new_plan_id, immediate=False)
     return await db.subscription.update_fields(
         sub.id,
         tier=new_plan.tier,
@@ -281,16 +303,18 @@ async def downgrade_subscription(db: DBStorage, *, user: User, new_plan_id: str)
     )
 
 
-async def cancel_subscription(db: DBStorage, user: User) -> Subscription:
+async def cancel_subscription(db: DBStorage, user: User, paddle: PaddleService) -> Subscription:
     """Schedule cancellation at the end of the current billing period.
 
-    The plan stays active until ``current_period_end`` — hints are not touched.
-    Sets ``cancel_at_period_end=True`` (cleared if the user re-subscribes).
-    Returns the updated subscription so the UI can show the end date.
+    Calls Paddle to actually stop billing (when live), then mirrors the
+    ``cancel_at_period_end`` flag locally. The plan stays active until
+    ``current_period_end`` — hints are not touched.
     """
     sub = await current_subscription(db, user)
     if sub is None:
         raise BadRequestException("No active subscription to cancel")
+    if paddle.enabled and not await paddle.cancel_subscription(sub.paddle_subscription_id):
+        raise BadRequestException("Couldn't cancel with the payment provider — please try again")
     return await db.subscription.update_fields(sub.id, cancel_at_period_end=True)
 
 
