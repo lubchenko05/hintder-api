@@ -5,9 +5,10 @@ operator's chat(s) when something worth knowing happens — a real registration 
 a new paid subscription. Everything here is best-effort: callers wrap invocations
 so a Telegram outage never breaks the user-facing request.
 
-Configuration lives in ``config``: ``telegram_bot_token`` (a Secret Manager
-secret) plus ``telegram_alert_chat_ids`` (comma-separated chat ids). When either
-is missing, ``telegram_enabled`` is False and every send is a silent no-op.
+Only ``telegram_bot_token`` (a Secret Manager secret) is configurable; the
+destination is hard-pinned to ``TELEGRAM_OPERATOR_CHAT_ID`` so alerts can never
+be redirected. When the token is missing, ``telegram_enabled`` is False and every
+send is a silent no-op.
 """
 
 import logging

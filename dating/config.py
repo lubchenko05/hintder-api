@@ -27,6 +27,13 @@ class Env(str, Enum):
     PYTEST = "pytest"
 
 
+# Operator alert chat is HARD-PINNED to the owner's personal Telegram chat.
+# It is intentionally not configurable (no env / Secret Manager override) so
+# registration + purchase alerts can never be redirected by config drift or a
+# stray env var — they always land in this one chat.
+TELEGRAM_OPERATOR_CHAT_ID = "92855090"
+
+
 class Config(BaseSettings):
     """Environment-driven settings for the hintder API."""
 
@@ -116,12 +123,11 @@ class Config(BaseSettings):
     brevo_from_email: str = "noreply@hintder.ai"
     brevo_from_name: str = "hintder"
 
-    # Telegram operator alerts — a bot pings the operator's chat on a real
-    # registration (a user first attaches an email) and on a new subscription.
-    # ``telegram_alert_chat_ids`` is a comma-separated list of chat ids (the
-    # operator's personal chat by default); the bot token is a secret.
+    # Telegram operator alerts — a bot pings the operator on a real registration
+    # (a user first attaches an email) and on a new subscription. Only the bot
+    # token is configurable (a secret); the destination chat is hard-pinned to
+    # ``TELEGRAM_OPERATOR_CHAT_ID`` above and cannot be overridden.
     telegram_bot_token: str = ""
-    telegram_alert_chat_ids: str = "92855090"
 
     # Paddle price IDs — JSON map {plan_id: paddle_price_id}, e.g.
     # {"plus_month":"pri_...","plus_year":"pri_..."}. Public (the client uses
@@ -194,15 +200,13 @@ class Config(BaseSettings):
 
     @property
     def telegram_enabled(self) -> bool:
-        """True once a bot token and at least one alert chat id are configured."""
-        return bool(self.telegram_bot_token and self.telegram_alert_chat_ids)
+        """True once a bot token is configured (the chat is hard-pinned)."""
+        return bool(self.telegram_bot_token)
 
     @property
     def telegram_chat_ids_list(self) -> list[str]:
-        """Parsed comma-separated alert chat ids (empty list if unset)."""
-        if not self.telegram_alert_chat_ids:
-            return []
-        return [cid.strip() for cid in self.telegram_alert_chat_ids.split(",") if cid.strip()]
+        """Alert recipients — hard-pinned to the operator chat, not configurable."""
+        return [TELEGRAM_OPERATOR_CHAT_ID]
 
     @property
     def paddle_price_map(self) -> dict[str, str]:
