@@ -375,6 +375,7 @@ async def activate_subscription_from_webhook(
     """
     plan = get_plan_or_error(plan_id)
     sub = await db.subscription.get_by_paddle_id(paddle_subscription_id)
+    is_new = sub is None
     if sub is None:
         sub = await db.subscription.create_for_user(
             user_id=user_id,
@@ -388,6 +389,26 @@ async def activate_subscription_from_webhook(
             paddle_customer_id=paddle_customer_id,
         )
     await _activate_subscription(db, sub, user_id)
+    # Operator ping — only for a brand-new subscription, so re-delivered events
+    # and ``subscription.updated`` (plan changes, renewals) don't spam.
+    if is_new:
+        user = await db.user.get_by_id(user_id)
+        await _notify_subscription(
+            email=user.email if user else None,
+            plan=plan_id,
+            subscription_id=paddle_subscription_id,
+        )
+
+
+async def _notify_subscription(*, email: str | None, plan: str, subscription_id: str) -> None:
+    """Best-effort operator alert on a new subscription (never raises)."""
+    try:
+        # Local import: breaks the bl→services cycle and defers httpx.
+        from dating.services.telegram import notify_subscription_created
+
+        await notify_subscription_created(email=email, plan=plan, subscription_id=subscription_id)
+    except Exception:
+        logger.exception("Failed to send Telegram alert for new subscription")
 
 
 async def cancel_subscription_from_webhook(db: DBStorage, *, paddle_subscription_id: str) -> None:

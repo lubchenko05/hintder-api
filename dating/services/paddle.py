@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import logging
 import uuid
+from typing import Any
 
 import httpx
 from pydantic import BaseModel
@@ -124,7 +125,7 @@ class PaddleService:
             return "https://api.paddle.com"
         return "https://sandbox-api.paddle.com"
 
-    async def _request(self, method: str, path: str, body: dict) -> bool:
+    async def _request(self, method: str, path: str, body: dict[str, Any]) -> bool:
         """Make an authed Paddle REST call; return whether it succeeded."""
         if not self.enabled:
             return False

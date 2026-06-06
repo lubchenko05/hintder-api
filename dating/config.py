@@ -116,6 +116,13 @@ class Config(BaseSettings):
     brevo_from_email: str = "noreply@hintder.ai"
     brevo_from_name: str = "hintder"
 
+    # Telegram operator alerts — a bot pings the operator's chat on a real
+    # registration (a user first attaches an email) and on a new subscription.
+    # ``telegram_alert_chat_ids`` is a comma-separated list of chat ids (the
+    # operator's personal chat by default); the bot token is a secret.
+    telegram_bot_token: str = ""
+    telegram_alert_chat_ids: str = "92855090"
+
     # Paddle price IDs — JSON map {plan_id: paddle_price_id}, e.g.
     # {"plus_month":"pri_...","plus_year":"pri_..."}. Public (the client uses
     # them too), so set as a plain env var in deploy.yml, not Secret Manager.
@@ -151,6 +158,7 @@ class Config(BaseSettings):
             "paddle_price_ids",
             "brevo_api_key",
             "brevo_from_email",
+            "telegram_bot_token",
         ]
         for secret_name in secrets_to_load:
             if data.get(secret_name) is not None and secret_name in data:
@@ -183,6 +191,18 @@ class Config(BaseSettings):
     def brevo_enabled(self) -> bool:
         """True once a Brevo API key is configured (transactional email)."""
         return bool(self.brevo_api_key)
+
+    @property
+    def telegram_enabled(self) -> bool:
+        """True once a bot token and at least one alert chat id are configured."""
+        return bool(self.telegram_bot_token and self.telegram_alert_chat_ids)
+
+    @property
+    def telegram_chat_ids_list(self) -> list[str]:
+        """Parsed comma-separated alert chat ids (empty list if unset)."""
+        if not self.telegram_alert_chat_ids:
+            return []
+        return [cid.strip() for cid in self.telegram_alert_chat_ids.split(",") if cid.strip()]
 
     @property
     def paddle_price_map(self) -> dict[str, str]:

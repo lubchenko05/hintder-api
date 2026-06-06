@@ -36,7 +36,7 @@ async def verify_firebase_token_and_upsert_user(
             logger.info("Device %s already claimed free hints — granting 0 to %s", device_id, uid)
             grant = 0
         logger.info("Creating new user %s (grant=%d)", uid, grant)
-        return await db.user.create(
+        created = await db.user.create(
             uid,
             email=email,
             name=name,
@@ -44,6 +44,18 @@ async def verify_firebase_token_and_upsert_user(
             free_hints=grant,
             device_id=device_id,
         )
+        # Only ping the operator for a REAL registration — a fresh row that
+        # already carries an email (e.g. signing into an existing account on a
+        # new device). Anonymous bootstrap rows have no email and stay silent;
+        # the anon→permanent upgrade is alerted in the refresh branch below.
+        if email is not None:
+            await _notify_registration(email=email, name=name)
+        return created
+
+    # The anon→permanent upgrade lands here: the row was created anonymously
+    # (no email) and now the linked token carries one. That first-email moment
+    # is the real "registration" in our anonymous-first model.
+    is_registration = existing.email is None and email is not None
 
     # Refresh mutable identity fields only if the token carries fresher values.
     updates: dict[str, str | None] = {}
@@ -53,8 +65,22 @@ async def verify_firebase_token_and_upsert_user(
         updates["name"] = name
     if avatar is not None and avatar != existing.avatar:
         updates["avatar"] = avatar
+    result = existing
     if updates:
         refreshed = await db.user.update(uid, updates)
         if refreshed is not None:
-            return refreshed
-    return existing
+            result = refreshed
+    if is_registration:
+        await _notify_registration(email=email, name=name)
+    return result
+
+
+async def _notify_registration(*, email: str | None, name: str | None) -> None:
+    """Best-effort operator alert on a new registration (never raises)."""
+    try:
+        # Local import: breaks the bl→services cycle and defers httpx.
+        from dating.services.telegram import notify_new_user
+
+        await notify_new_user(email=email, name=name)
+    except Exception:
+        logger.exception("Failed to send Telegram alert for new user")
