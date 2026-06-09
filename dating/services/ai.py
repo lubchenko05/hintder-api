@@ -262,11 +262,16 @@ def _photos(photos: list["_GeminiPhoto"]) -> list[PhotoSnapshotDTO]:
 
 
 _VOICE = (
-    "You are hintder, an elite dating wingman. You write like a confident, funny "
-    "version of the user — never like an AI. No em-dash pile-ups, no 'as an "
-    "opener', no perfect-grammar stiffness. Lines are specific to her profile, "
-    "create light tension, and hand her a clear way to reply. Keep it real, never "
-    "cringe, never pick-up-artist."
+    "You are hintder, an elite dating wingman. You text like a sharp, funny, real "
+    "human — never like an AI, and never like a comedian grinding one bit. No "
+    "em-dash pile-ups, no 'as an opener', no perfect-grammar stiffness, no "
+    "try-hard wordplay or forced callbacks. Sound like how people actually text. "
+    "DON'T fixate on a single detail from her profile and keep circling back to it "
+    "(her job, one bio line, etc.) — touch a detail at most once, then improvise "
+    "and take the conversation somewhere new. Match her energy and her message "
+    "length: short, low-effort replies get short, easy replies back. Create light, "
+    "natural tension and always hand her a simple way to respond. Keep it real, "
+    "never cringe, never pick-up-artist."
 )
 
 
@@ -380,7 +385,12 @@ class GeminiAIClient:
         prompt = (
             f"Her profile read: {analysis.model_dump_json()}\n\n"
             f"Write 5 distinct opening messages in a '{style}' voice "
-            f"(risk dial: {tone}). For each: the text, a category "
+            f"(risk dial: {tone}). CRUCIAL: each of the 5 takes a DIFFERENT angle — "
+            "a different topic, hook, and move. Do NOT make all five riff on the "
+            "same bio detail; spread them across her photos, interests and overall "
+            "vibe, and let a couple not hinge on any single detail at all. Keep "
+            "each short and natural, the way a witty person actually texts — no "
+            "comedy-bit overkill. For each: the text, a category "
             "(best|safe|funny|flirty|short|risky), a 1-3 word label, and a "
             "cringeRisk 0-100 (lower is safer)."
         )
@@ -402,6 +412,17 @@ class GeminiAIClient:
             "(high|medium|low|unclear), her tone, whether to push, a one-line "
             "suggestion, 3 next-message candidates, one thing to NOT send, and a "
             "dateReadiness 0-100 with a short note.\n"
+            "The 3 candidates are the most important output. Each MUST:\n"
+            "- actually respond to what she JUST said and move the thread forward — "
+            "not restate the situation, not circle back to her bio;\n"
+            "- take a DIFFERENT direction from the other two. Do NOT have all three "
+            "recycle the same joke or the same one detail (e.g. her job). Touch a "
+            "profile detail at most once across the three, then improvise: bring up "
+            "something new or ask a simple, real question;\n"
+            "- match her energy and length. If she's sending short, low-effort "
+            "replies ('ok', 'sure', a few words), keep yours short and easy too — "
+            "never answer a 2-word reply with a long comedy bit. Text like a normal "
+            "person, not a stand-up doing a set.\n"
             "Judge it from the actual dialogue — but lean towards NOT rushing: "
             "readiness should generally build over the back-and-forth rather than "
             "spike to 'ready to ask out' on a single warm reply. This is a soft "
