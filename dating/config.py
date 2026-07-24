@@ -99,7 +99,7 @@ class Config(BaseSettings):
     # AI processing — real Gemini, no mocks. Two auth modes:
     #   • Vertex AI (default) — hintder-ai GCP project + the shared GCP SA
     #   • Google AI Studio API key (set ``ai_api_key`` + ``ai_use_vertex=False``)
-    ai_model: str = "gemini-3.5-flash"  # latest Flash (not Pro)
+    ai_model: str = "gemini-3.6-flash"  # latest Flash (not Pro)
     ai_use_vertex: bool = True
     ai_vertex_project: str = "hintder-ai"
     ai_vertex_location: str = "global"  # Gemini 3.x are served on the global endpoint
