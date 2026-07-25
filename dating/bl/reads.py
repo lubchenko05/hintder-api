@@ -21,9 +21,11 @@ from dating.models.user import User
 from dating.services.ai import (
     AIClient,
     ConversationTurnInput,
+    DecodeDTO,
     FollowUpAnalysisDTO,
     GeneratedMessageDTO,
     ProfileAnalysisDTO,
+    ProfileOptimizeDTO,
 )
 from dating.storages import DBStorage
 
@@ -32,6 +34,8 @@ logger = logging.getLogger(__name__)
 # Hint kinds for the consumption ledger (free-form strings).
 _KIND_OPENERS = "openers"
 _KIND_TWEAK = "tweak"
+_KIND_DECODE = "decode"
+_KIND_OPTIMIZE = "optimize"
 
 
 async def analyze_profile(
@@ -78,4 +82,34 @@ async def regenerate_message(
         message_text=message_text, instruction=instruction, tone=tone
     )
     await bl_hints.commit(db, user, kind=_KIND_TWEAK, mode=mode)
+    return result
+
+
+async def decode_message(
+    db: DBStorage,
+    ai: AIClient,
+    *,
+    user: User,
+    her_message: str,
+    analysis: ProfileAnalysisDTO | None = None,
+) -> DecodeDTO:
+    """Decode one message from her (meaning + the move). Costs 1 hint."""
+    mode = await bl_hints.precheck(db, user)
+    result = await ai.decode_message(her_message=her_message, analysis=analysis)
+    await bl_hints.commit(db, user, kind=_KIND_DECODE, mode=mode)
+    return result
+
+
+async def optimize_profile(
+    db: DBStorage,
+    ai: AIClient,
+    *,
+    user: User,
+    images: list[str],
+    bio: str | None = None,
+) -> ProfileOptimizeDTO:
+    """Review the USER's own profile (score + bio + photo feedback). Costs 1 hint."""
+    mode = await bl_hints.precheck(db, user)
+    result = await ai.optimize_profile(images=images, bio=bio)
+    await bl_hints.commit(db, user, kind=_KIND_OPTIMIZE, mode=mode)
     return result

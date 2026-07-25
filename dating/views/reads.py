@@ -20,15 +20,19 @@ from dating.models.user import User
 from dating.serializers.reads import (
     AnalyzeProfileValidator,
     AnalyzeReplyValidator,
+    DecodeMessageValidator,
     GenerateMessagesValidator,
+    OptimizeProfileValidator,
     RegenerateMessageValidator,
     SignedUrlsValidator,
 )
 from dating.services.ai import (
     AIClient,
+    DecodeDTO,
     FollowUpAnalysisDTO,
     GeneratedMessageDTO,
     ProfileAnalysisDTO,
+    ProfileOptimizeDTO,
 )
 from dating.services.storage import StorageService
 from dating.storages import DBStorage
@@ -115,4 +119,30 @@ async def regenerate_message(
         message_text=payload.message_text,
         instruction=payload.instruction,
         tone=payload.tone,
+    )
+
+
+@router.post("/reads/decode", response_model=DecodeDTO, tags=["reads"])
+async def decode_message(
+    payload: DecodeMessageValidator,
+    user: User = Depends(get_current_user),
+    db: DBStorage = Depends(get_db_storage),
+    ai: AIClient = Depends(get_ai_client),
+) -> DecodeDTO:
+    """Decode one message from her (meaning + the move). Spends 1 hint."""
+    return await bl_reads.decode_message(
+        db, ai, user=user, her_message=payload.her_message, analysis=payload.analysis
+    )
+
+
+@router.post("/reads/optimize", response_model=ProfileOptimizeDTO, tags=["reads"])
+async def optimize_profile(
+    payload: OptimizeProfileValidator,
+    user: User = Depends(get_current_user),
+    db: DBStorage = Depends(get_db_storage),
+    ai: AIClient = Depends(get_ai_client),
+) -> ProfileOptimizeDTO:
+    """Review the USER's own profile: score + bio rewrites + photo feedback. Spends 1 hint."""
+    return await bl_reads.optimize_profile(
+        db, ai, user=user, images=payload.images, bio=payload.bio
     )

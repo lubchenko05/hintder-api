@@ -141,6 +141,35 @@ class ConversationTurnInput(BaseModel):
     text: str
 
 
+class DecodeDTO(BaseModel):
+    """A read of ONE message from her — what it means + the move (Track 4)."""
+
+    meaning: str  # what she's really saying, subtext included
+    interestLevel: str  # high | medium | low | unclear
+    mood: str  # a few words on her tone/mood
+    losingInterest: bool  # is she cooling off?
+    move: str  # the ONE thing to do next
+    avoid: str  # the ONE thing NOT to do
+
+
+class PhotoFeedbackDTO(BaseModel):
+    """Feedback on one of the USER's own profile photos."""
+
+    slot: int  # 0-based photo index
+    verdict: str  # keep | lead | cut | move
+    note: str  # why
+
+
+class ProfileOptimizeDTO(BaseModel):
+    """A review of the USER's OWN dating profile (Track 4)."""
+
+    score: int  # 0-100 overall
+    firstImpression: str  # what a match thinks in ~2 seconds
+    bioRewrites: list[str]  # 2-3 stronger bio options in his voice
+    photoFeedback: list[PhotoFeedbackDTO]
+    topFixes: list[str]  # the 3 highest-impact changes
+
+
 # ── Gemini schema models (what the model fills — no server-only fields) ───
 
 
@@ -222,6 +251,16 @@ class AIClient(Protocol):
         self, *, message_text: str, instruction: str, tone: str
     ) -> GeneratedMessageDTO:
         """Rewrite one message per a freeform instruction."""
+        ...
+
+    async def decode_message(
+        self, *, her_message: str, analysis: ProfileAnalysisDTO | None
+    ) -> DecodeDTO:
+        """Decode one message from her: meaning, interest, and the move."""
+        ...
+
+    async def optimize_profile(self, *, images: list[str], bio: str | None) -> ProfileOptimizeDTO:
+        """Review the USER's own profile: score, bio rewrites, photo feedback."""
         ...
 
 
@@ -488,6 +527,49 @@ class GeminiAIClient:
         result = await self._generate(contents=prompt, schema=_GeminiMessage)
         assert isinstance(result, _GeminiMessage)
         return _msg(result, normalise_tone(tone))
+
+    async def decode_message(
+        self, *, her_message: str, analysis: ProfileAnalysisDTO | None
+    ) -> DecodeDTO:
+        """See :class:`AIClient`."""
+        ctx = (
+            f"\n\nHer profile read (for context): {analysis.model_dump_json()}" if analysis else ""
+        )
+        prompt = (
+            f"She just sent this message:\n{her_message!r}{ctx}\n\n"
+            "Decode it for a guy who wants to read her right. Return: `meaning` "
+            "(what she's really saying, subtext included), `interestLevel` "
+            "(high|medium|low|unclear), `mood` (a few words), `losingInterest` "
+            "(true only if she's genuinely cooling off), `move` (the ONE thing to "
+            "do next), and `avoid` (the ONE thing NOT to do). Be blunt, specific "
+            "and human — never generic horoscope talk."
+        )
+        result = await self._generate(contents=prompt, schema=DecodeDTO)
+        assert isinstance(result, DecodeDTO)
+        return result
+
+    async def optimize_profile(self, *, images: list[str], bio: str | None) -> ProfileOptimizeDTO:
+        """See :class:`AIClient`."""
+        from google.genai import types
+
+        parts: list[object] = []
+        for data in images[:6]:
+            raw, mime = _decode_image(data)
+            parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+        parts.append(
+            "These are the USER'S OWN dating-profile screenshots"
+            + (f", current bio: {bio!r}" if bio else "")
+            + ". Review it like a brutally honest wingman who wants HIM to get more "
+            "matches. Return: `score` 0-100; `firstImpression` (what a woman thinks "
+            "in ~2 seconds); `bioRewrites` (2-3 stronger bios in his likely voice — "
+            "short, specific, no clichés like 'love to laugh'); `photoFeedback` "
+            "(per photo: `slot` 0-based index, `verdict` keep|lead|cut|move, `note` "
+            "a concrete why); and `topFixes` (the 3 highest-impact changes). Be "
+            "specific and honest, never generic."
+        )
+        result = await self._generate(contents=parts, schema=ProfileOptimizeDTO)
+        assert isinstance(result, ProfileOptimizeDTO)
+        return result
 
 
 def build_ai_client(cfg: Config) -> AIClient:
