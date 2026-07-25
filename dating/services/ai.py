@@ -90,6 +90,11 @@ class ProfileAnalysisDTO(BaseModel):
     angle: str  # humor | curiosity | calm | flirty
     interests: list[str]
     photoContext: list[PhotoSnapshotDTO]
+    # Dense, durable free-text read of EVERYTHING visible/inferable (photos, exact
+    # bio/prompt wording, style, what she'd actually engage with). Captured once
+    # from the images, then carried forward as the context for openers/replies so
+    # we never re-send the screenshots.
+    detailedRead: str | None = None
     cosmicRead: str | None = None
     dateAngles: list[DateAngleDTO] | None = None
     timingWindow: str | None = None
@@ -109,6 +114,8 @@ class GeneratedMessageDTO(BaseModel):
     label: str
     cringeRisk: int
     tone: str
+    # Coach layer: one short line on WHY this lands (builds the user's intuition).
+    whyItWorks: str | None = None
 
 
 class FollowUpAnalysisDTO(BaseModel):
@@ -153,6 +160,7 @@ class _GeminiAnalysis(BaseModel):
     angle: str
     interests: list[str]
     photoContext: list[_GeminiPhoto]
+    detailedRead: str
     cosmicRead: str
     dateAngles: list[DateAngleDTO]
     timingWindow: str
@@ -165,6 +173,7 @@ class _GeminiMessage(BaseModel):
     category: str
     label: str
     cringeRisk: int
+    whyItWorks: str
 
 
 class _GeminiMessageList(BaseModel):
@@ -239,6 +248,7 @@ def _msg(m: "_GeminiMessage", tone: str) -> GeneratedMessageDTO:
         label=m.label,
         cringeRisk=max(0, min(100, m.cringeRisk)),
         tone=tone,
+        whyItWorks=getattr(m, "whyItWorks", None) or None,
     )
 
 
@@ -355,6 +365,13 @@ class GeminiAIClient:
             "opening angle (humor|curiosity|calm|flirty), interests, a per-photo "
             "read, a short playful 'cosmic read', 2-3 date angles, a likely "
             "responsive timing window, and green-light topics.\n\n"
+            "Fill `detailedRead` with a DENSE, concrete read of EVERYTHING you can "
+            "see and infer — every photo (setting, objects, activity, who/what's in "
+            "it, style, energy), her EXACT bio / prompt wording, running jokes, "
+            "what she clearly cares about, and SEVERAL distinct things worth talking "
+            "about (not just one). This text is the only memory later steps get — "
+            "the screenshots are NOT re-sent — so pack in every useful detail a "
+            "wingman would want when writing openers and replies. 4-8 sentences.\n\n"
             f"Also fill `previews`: for EACH voice ({voices}) AND EACH risk "
             f"({risks}) — one ready-to-send opening line tailored to THIS profile "
             "(so one entry per voice×risk combination). Each entry is "
@@ -371,6 +388,7 @@ class GeminiAIClient:
             angle=result.angle,
             interests=result.interests,
             photoContext=_photos(result.photoContext),
+            detailedRead=result.detailedRead,
             cosmicRead=result.cosmicRead,
             dateAngles=result.dateAngles,
             timingWindow=result.timingWindow,
@@ -390,9 +408,12 @@ class GeminiAIClient:
             "same bio detail; spread them across her photos, interests and overall "
             "vibe, and let a couple not hinge on any single detail at all. Keep "
             "each short and natural, the way a witty person actually texts — no "
-            "comedy-bit overkill. For each: the text, a category "
-            "(best|safe|funny|flirty|short|risky), a 1-3 word label, and a "
-            "cringeRisk 0-100 (lower is safer)."
+            "comedy-bit overkill. Draw on the WHOLE read — especially "
+            "`detailedRead`, plus hooks and interests — as your raw material, not "
+            "just one line. For each: the text, a category "
+            "(best|safe|funny|flirty|short|risky), a 1-3 word label, a cringeRisk "
+            "0-100 (lower is safer), and `whyItWorks` — ONE short line (max ~12 "
+            "words) on why it lands, in plain wingman language (no jargon)."
         )
         result = await self._generate(contents=prompt, schema=_GeminiMessageList)
         assert isinstance(result, _GeminiMessageList)
@@ -423,6 +444,9 @@ class GeminiAIClient:
             "replies ('ok', 'sure', a few words), keep yours short and easy too — "
             "never answer a 2-word reply with a long comedy bit. Text like a normal "
             "person, not a stand-up doing a set.\n"
+            "Lean on the WHOLE read (especially `detailedRead`) plus the FULL thread "
+            "above — not one bio line. For EACH candidate also give `whyItWorks` — "
+            "one short line (max ~12 words) on why it lands, in plain language.\n"
             "Judge it from the actual dialogue — but lean towards NOT rushing: "
             "readiness should generally build over the back-and-forth rather than "
             "spike to 'ready to ask out' on a single warm reply. This is a soft "
@@ -457,8 +481,9 @@ class GeminiAIClient:
         prompt = (
             f"Original message: {message_text!r}\n"
             f"Rewrite it per this instruction: {instruction!r}. Keep it natural and "
-            "specific. Return the new text, a category, a 1-3 word label, and a "
-            "cringeRisk 0-100."
+            "specific — sound like a real person texting, not an AI. Return the new "
+            "text, a category, a 1-3 word label, a cringeRisk 0-100, and "
+            "`whyItWorks` — one short line on why it lands."
         )
         result = await self._generate(contents=prompt, schema=_GeminiMessage)
         assert isinstance(result, _GeminiMessage)
