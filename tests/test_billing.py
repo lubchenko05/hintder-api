@@ -2,8 +2,8 @@
 
 import pytest
 
-from dating.bl.billing import HINT_PACKS, PACKS_BY_ID, get_pack_or_error
-from dating.bl.plans import PLANS_BY_ID, get_plan_or_error
+from dating.bl.billing import get_pack_or_error, HINT_PACKS, PACKS_BY_ID
+from dating.bl.plans import get_plan_or_error, PLANS_BY_ID
 from dating.utils.error_handler import BadRequestException
 
 

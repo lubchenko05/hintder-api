@@ -45,7 +45,10 @@ class EmailService:
                 resp = await client.post(
                     BREVO_API_URL,
                     json=payload,
-                    headers={"api-key": self._cfg.brevo_api_key, "Content-Type": "application/json"},
+                    headers={
+                        "api-key": self._cfg.brevo_api_key,
+                        "Content-Type": "application/json",
+                    },
                 )
             if resp.status_code in (200, 201):
                 logger.info("Email sent to %s: %s", to, subject)

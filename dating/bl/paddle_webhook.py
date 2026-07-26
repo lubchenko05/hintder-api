@@ -37,7 +37,10 @@ async def _activate_from_subscription_data(
     if not (paddle_sub_id and user_id and plan_id):
         logger.warning(
             "subscription event %s missing data (sub=%s uid=%s plan=%s)",
-            event_id, paddle_sub_id, user_id, plan_id,
+            event_id,
+            paddle_sub_id,
+            user_id,
+            plan_id,
         )
         return
     await bl_billing.activate_subscription_from_webhook(

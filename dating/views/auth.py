@@ -4,8 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Response, status
 
-from dating.bl import auth as bl_auth
-from dating.bl import email_link as bl_email_link
+from dating.bl import auth as bl_auth, email_link as bl_email_link
 from dating.dependencies import get_db_storage, get_email_service
 from dating.serializers.auth import (
     EmailLinkValidator,

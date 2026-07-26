@@ -131,7 +131,12 @@ async def decode_message(
 ) -> DecodeDTO:
     """Decode one message from her (meaning + the move). Spends 1 hint."""
     return await bl_reads.decode_message(
-        db, ai, user=user, her_message=payload.her_message, analysis=payload.analysis
+        db,
+        ai,
+        user=user,
+        her_message=payload.her_message,
+        images=payload.images,
+        analysis=payload.analysis,
     )
 
 

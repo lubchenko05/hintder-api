@@ -150,6 +150,8 @@ class DecodeDTO(BaseModel):
     losingInterest: bool  # is she cooling off?
     move: str  # the ONE thing to do next
     avoid: str  # the ONE thing NOT to do
+    replies: list[str]  # 2-3 send-ready lines, not advice about lines
+    timing: str  # when to send it — the half of the answer advice usually skips
 
 
 class PhotoFeedbackDTO(BaseModel):
@@ -254,9 +256,13 @@ class AIClient(Protocol):
         ...
 
     async def decode_message(
-        self, *, her_message: str, analysis: ProfileAnalysisDTO | None
+        self,
+        *,
+        her_message: str,
+        images: list[str] | None = None,
+        analysis: ProfileAnalysisDTO | None = None,
     ) -> DecodeDTO:
-        """Decode one message from her: meaning, interest, and the move."""
+        """Decode her message (text and/or chat screenshots): meaning + the move."""
         ...
 
     async def optimize_profile(self, *, images: list[str], bio: str | None) -> ProfileOptimizeDTO:
@@ -363,7 +369,7 @@ class GeminiAIClient:
         def _call() -> BaseModel:
             resp = self._client.models.generate_content(
                 model=self._model,
-                contents=contents,  # type: ignore[arg-type]
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema=schema,
@@ -529,22 +535,42 @@ class GeminiAIClient:
         return _msg(result, normalise_tone(tone))
 
     async def decode_message(
-        self, *, her_message: str, analysis: ProfileAnalysisDTO | None
+        self,
+        *,
+        her_message: str,
+        images: list[str] | None = None,
+        analysis: ProfileAnalysisDTO | None = None,
     ) -> DecodeDTO:
         """See :class:`AIClient`."""
+        from google.genai import types
+
         ctx = (
             f"\n\nHer profile read (for context): {analysis.model_dump_json()}" if analysis else ""
         )
+        said = (
+            f"She just sent this message:\n{her_message!r}\n\n"
+            if her_message
+            else "Her message is in the screenshot(s) above — read the LAST thing she sent.\n\n"
+        )
         prompt = (
-            f"She just sent this message:\n{her_message!r}{ctx}\n\n"
+            f"{said}{ctx}"
             "Decode it for a guy who wants to read her right. Return: `meaning` "
             "(what she's really saying, subtext included), `interestLevel` "
             "(high|medium|low|unclear), `mood` (a few words), `losingInterest` "
             "(true only if she's genuinely cooling off), `move` (the ONE thing to "
-            "do next), and `avoid` (the ONE thing NOT to do). Be blunt, specific "
-            "and human — never generic horoscope talk."
+            "do next), `avoid` (the ONE thing NOT to do), `replies` (2-3 lines he "
+            "can send AS-IS, written in his voice — texts, not advice, no "
+            "placeholders, no quotes around them, each a different angle), and "
+            "`timing` (when to send it, one short line — e.g. 'now, while she's "
+            "still on her phone' or 'tomorrow afternoon, let today breathe'). "
+            "Be blunt, specific and human — never generic horoscope talk."
         )
-        result = await self._generate(contents=prompt, schema=DecodeDTO)
+        parts: list[object] = []
+        for data in (images or [])[:5]:
+            raw, mime = _decode_image(data)
+            parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+        parts.append(prompt)
+        result = await self._generate(contents=parts, schema=DecodeDTO)
         assert isinstance(result, DecodeDTO)
         return result
 

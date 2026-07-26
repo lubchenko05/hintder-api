@@ -91,11 +91,12 @@ async def decode_message(
     *,
     user: User,
     her_message: str,
+    images: list[str] | None = None,
     analysis: ProfileAnalysisDTO | None = None,
 ) -> DecodeDTO:
-    """Decode one message from her (meaning + the move). Costs 1 hint."""
+    """Decode her message — text and/or chat screenshots. Costs 1 hint."""
     mode = await bl_hints.precheck(db, user)
-    result = await ai.decode_message(her_message=her_message, analysis=analysis)
+    result = await ai.decode_message(her_message=her_message, images=images, analysis=analysis)
     await bl_hints.commit(db, user, kind=_KIND_DECODE, mode=mode)
     return result
 

@@ -49,7 +49,8 @@ class RegenerateMessageValidator(BaseValidator):
 class DecodeMessageValidator(BaseValidator):
     """``POST /reads/decode`` — one message from her (+ optional profile read)."""
 
-    her_message: NonEmptyStr
+    her_message: str = ""
+    images: list[str] = []
     analysis: ProfileAnalysisDTO | None = None
 
 
