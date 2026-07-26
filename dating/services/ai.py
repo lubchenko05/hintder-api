@@ -90,6 +90,11 @@ class ProfileAnalysisDTO(BaseModel):
     angle: str  # humor | curiosity | calm | flirty
     interests: list[str]
     photoContext: list[PhotoSnapshotDTO]
+    # Dense, durable free-text read of EVERYTHING visible/inferable (photos, exact
+    # bio/prompt wording, style, what she'd actually engage with). Captured once
+    # from the images, then carried forward as the context for openers/replies so
+    # we never re-send the screenshots.
+    detailedRead: str | None = None
     cosmicRead: str | None = None
     dateAngles: list[DateAngleDTO] | None = None
     timingWindow: str | None = None
@@ -109,6 +114,8 @@ class GeneratedMessageDTO(BaseModel):
     label: str
     cringeRisk: int
     tone: str
+    # Coach layer: one short line on WHY this lands (builds the user's intuition).
+    whyItWorks: str | None = None
 
 
 class FollowUpAnalysisDTO(BaseModel):
@@ -134,6 +141,37 @@ class ConversationTurnInput(BaseModel):
     text: str
 
 
+class DecodeDTO(BaseModel):
+    """A read of ONE message from her — what it means + the move (Track 4)."""
+
+    meaning: str  # what she's really saying, subtext included
+    interestLevel: str  # high | medium | low | unclear
+    mood: str  # a few words on her tone/mood
+    losingInterest: bool  # is she cooling off?
+    move: str  # the ONE thing to do next
+    avoid: str  # the ONE thing NOT to do
+    replies: list[str]  # 2-3 send-ready lines, not advice about lines
+    timing: str  # when to send it — the half of the answer advice usually skips
+
+
+class PhotoFeedbackDTO(BaseModel):
+    """Feedback on one of the USER's own profile photos."""
+
+    slot: int  # 0-based photo index
+    verdict: str  # keep | lead | cut | move
+    note: str  # why
+
+
+class ProfileOptimizeDTO(BaseModel):
+    """A review of the USER's OWN dating profile (Track 4)."""
+
+    score: int  # 0-100 overall
+    firstImpression: str  # what a match thinks in ~2 seconds
+    bioRewrites: list[str]  # 2-3 stronger bio options in his voice
+    photoFeedback: list[PhotoFeedbackDTO]
+    topFixes: list[str]  # the 3 highest-impact changes
+
+
 # ── Gemini schema models (what the model fills — no server-only fields) ───
 
 
@@ -153,6 +191,7 @@ class _GeminiAnalysis(BaseModel):
     angle: str
     interests: list[str]
     photoContext: list[_GeminiPhoto]
+    detailedRead: str
     cosmicRead: str
     dateAngles: list[DateAngleDTO]
     timingWindow: str
@@ -165,6 +204,7 @@ class _GeminiMessage(BaseModel):
     category: str
     label: str
     cringeRisk: int
+    whyItWorks: str
 
 
 class _GeminiMessageList(BaseModel):
@@ -215,6 +255,20 @@ class AIClient(Protocol):
         """Rewrite one message per a freeform instruction."""
         ...
 
+    async def decode_message(
+        self,
+        *,
+        her_message: str,
+        images: list[str] | None = None,
+        analysis: ProfileAnalysisDTO | None = None,
+    ) -> DecodeDTO:
+        """Decode her message (text and/or chat screenshots): meaning + the move."""
+        ...
+
+    async def optimize_profile(self, *, images: list[str], bio: str | None) -> ProfileOptimizeDTO:
+        """Review the USER's own profile: score, bio rewrites, photo feedback."""
+        ...
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -239,6 +293,7 @@ def _msg(m: "_GeminiMessage", tone: str) -> GeneratedMessageDTO:
         label=m.label,
         cringeRisk=max(0, min(100, m.cringeRisk)),
         tone=tone,
+        whyItWorks=getattr(m, "whyItWorks", None) or None,
     )
 
 
@@ -314,7 +369,7 @@ class GeminiAIClient:
         def _call() -> BaseModel:
             resp = self._client.models.generate_content(
                 model=self._model,
-                contents=contents,  # type: ignore[arg-type]
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema=schema,
@@ -355,6 +410,13 @@ class GeminiAIClient:
             "opening angle (humor|curiosity|calm|flirty), interests, a per-photo "
             "read, a short playful 'cosmic read', 2-3 date angles, a likely "
             "responsive timing window, and green-light topics.\n\n"
+            "Fill `detailedRead` with a DENSE, concrete read of EVERYTHING you can "
+            "see and infer — every photo (setting, objects, activity, who/what's in "
+            "it, style, energy), her EXACT bio / prompt wording, running jokes, "
+            "what she clearly cares about, and SEVERAL distinct things worth talking "
+            "about (not just one). This text is the only memory later steps get — "
+            "the screenshots are NOT re-sent — so pack in every useful detail a "
+            "wingman would want when writing openers and replies. 4-8 sentences.\n\n"
             f"Also fill `previews`: for EACH voice ({voices}) AND EACH risk "
             f"({risks}) — one ready-to-send opening line tailored to THIS profile "
             "(so one entry per voice×risk combination). Each entry is "
@@ -371,6 +433,7 @@ class GeminiAIClient:
             angle=result.angle,
             interests=result.interests,
             photoContext=_photos(result.photoContext),
+            detailedRead=result.detailedRead,
             cosmicRead=result.cosmicRead,
             dateAngles=result.dateAngles,
             timingWindow=result.timingWindow,
@@ -390,9 +453,12 @@ class GeminiAIClient:
             "same bio detail; spread them across her photos, interests and overall "
             "vibe, and let a couple not hinge on any single detail at all. Keep "
             "each short and natural, the way a witty person actually texts — no "
-            "comedy-bit overkill. For each: the text, a category "
-            "(best|safe|funny|flirty|short|risky), a 1-3 word label, and a "
-            "cringeRisk 0-100 (lower is safer)."
+            "comedy-bit overkill. Draw on the WHOLE read — especially "
+            "`detailedRead`, plus hooks and interests — as your raw material, not "
+            "just one line. For each: the text, a category "
+            "(best|safe|funny|flirty|short|risky), a 1-3 word label, a cringeRisk "
+            "0-100 (lower is safer), and `whyItWorks` — ONE short line (max ~12 "
+            "words) on why it lands, in plain wingman language (no jargon)."
         )
         result = await self._generate(contents=prompt, schema=_GeminiMessageList)
         assert isinstance(result, _GeminiMessageList)
@@ -423,6 +489,9 @@ class GeminiAIClient:
             "replies ('ok', 'sure', a few words), keep yours short and easy too — "
             "never answer a 2-word reply with a long comedy bit. Text like a normal "
             "person, not a stand-up doing a set.\n"
+            "Lean on the WHOLE read (especially `detailedRead`) plus the FULL thread "
+            "above — not one bio line. For EACH candidate also give `whyItWorks` — "
+            "one short line (max ~12 words) on why it lands, in plain language.\n"
             "Judge it from the actual dialogue — but lean towards NOT rushing: "
             "readiness should generally build over the back-and-forth rather than "
             "spike to 'ready to ask out' on a single warm reply. This is a soft "
@@ -457,12 +526,76 @@ class GeminiAIClient:
         prompt = (
             f"Original message: {message_text!r}\n"
             f"Rewrite it per this instruction: {instruction!r}. Keep it natural and "
-            "specific. Return the new text, a category, a 1-3 word label, and a "
-            "cringeRisk 0-100."
+            "specific — sound like a real person texting, not an AI. Return the new "
+            "text, a category, a 1-3 word label, a cringeRisk 0-100, and "
+            "`whyItWorks` — one short line on why it lands."
         )
         result = await self._generate(contents=prompt, schema=_GeminiMessage)
         assert isinstance(result, _GeminiMessage)
         return _msg(result, normalise_tone(tone))
+
+    async def decode_message(
+        self,
+        *,
+        her_message: str,
+        images: list[str] | None = None,
+        analysis: ProfileAnalysisDTO | None = None,
+    ) -> DecodeDTO:
+        """See :class:`AIClient`."""
+        from google.genai import types
+
+        ctx = (
+            f"\n\nHer profile read (for context): {analysis.model_dump_json()}" if analysis else ""
+        )
+        said = (
+            f"She just sent this message:\n{her_message!r}\n\n"
+            if her_message
+            else "Her message is in the screenshot(s) above — read the LAST thing she sent.\n\n"
+        )
+        prompt = (
+            f"{said}{ctx}"
+            "Decode it for a guy who wants to read her right. Return: `meaning` "
+            "(what she's really saying, subtext included), `interestLevel` "
+            "(high|medium|low|unclear), `mood` (a few words), `losingInterest` "
+            "(true only if she's genuinely cooling off), `move` (the ONE thing to "
+            "do next), `avoid` (the ONE thing NOT to do), `replies` (2-3 lines he "
+            "can send AS-IS, written in his voice — texts, not advice, no "
+            "placeholders, no quotes around them, each a different angle), and "
+            "`timing` (when to send it, one short line — e.g. 'now, while she's "
+            "still on her phone' or 'tomorrow afternoon, let today breathe'). "
+            "Be blunt, specific and human — never generic horoscope talk."
+        )
+        parts: list[object] = []
+        for data in (images or [])[:5]:
+            raw, mime = _decode_image(data)
+            parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+        parts.append(prompt)
+        result = await self._generate(contents=parts, schema=DecodeDTO)
+        assert isinstance(result, DecodeDTO)
+        return result
+
+    async def optimize_profile(self, *, images: list[str], bio: str | None) -> ProfileOptimizeDTO:
+        """See :class:`AIClient`."""
+        from google.genai import types
+
+        parts: list[object] = []
+        for data in images[:6]:
+            raw, mime = _decode_image(data)
+            parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+        parts.append(
+            "These are the USER'S OWN dating-profile screenshots"
+            + (f", current bio: {bio!r}" if bio else "")
+            + ". Review it like a brutally honest wingman who wants HIM to get more "
+            "matches. Return: `score` 0-100; `firstImpression` (what a woman thinks "
+            "in ~2 seconds); `bioRewrites` (2-3 stronger bios in his likely voice — "
+            "short, specific, no clichés like 'love to laugh'); `photoFeedback` "
+            "(per photo: `slot` 0-based index, `verdict` keep|lead|cut|move, `note` "
+            "a concrete why); and `topFixes` (the 3 highest-impact changes). Be "
+            "specific and honest, never generic."
+        )
+        result = await self._generate(contents=parts, schema=ProfileOptimizeDTO)
+        assert isinstance(result, ProfileOptimizeDTO)
+        return result
 
 
 def build_ai_client(cfg: Config) -> AIClient:

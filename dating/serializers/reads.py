@@ -44,3 +44,18 @@ class RegenerateMessageValidator(BaseValidator):
     message_text: NonEmptyStr
     instruction: NonEmptyStr
     tone: str = "confident"
+
+
+class DecodeMessageValidator(BaseValidator):
+    """``POST /reads/decode`` — one message from her (+ optional profile read)."""
+
+    her_message: str = ""
+    images: list[str] = []
+    analysis: ProfileAnalysisDTO | None = None
+
+
+class OptimizeProfileValidator(BaseValidator):
+    """``POST /reads/optimize`` — the USER's own profile screenshots + bio."""
+
+    images: list[str] = []
+    bio: LongText | None = None

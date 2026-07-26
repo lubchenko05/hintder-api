@@ -40,7 +40,13 @@ def test_decode_image_raw_base64_defaults_jpeg() -> None:
 
 
 def test_msg_generates_id_and_clamps_cringe() -> None:
-    m = _GeminiMessage(text="hi", category="best", label="opener", cringeRisk=150)
+    m = _GeminiMessage(
+        text="hi",
+        category="best",
+        label="opener",
+        cringeRisk=150,
+        whyItWorks="takes her bait and gives her a lane to answer in",
+    )
     out = _msg(m, "funny")
     assert out.tone == "funny"
     assert len(out.id) == 10
