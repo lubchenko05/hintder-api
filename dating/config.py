@@ -129,6 +129,14 @@ class Config(BaseSettings):
     # ``TELEGRAM_OPERATOR_CHAT_ID`` above and cannot be overridden.
     telegram_bot_token: str = ""
 
+    # Content CMS — guides and stories live in this database, and the daily jobs
+    # publish through the admin API with this key instead of committing markdown
+    # and waiting for a deploy. Rotating it is a Secret Manager change, no release.
+    content_automation_key: str = ""
+    # Shared with the frontend's /api/revalidate: after a publish the backend
+    # asks Next.js to drop the cached page, list and sitemap.
+    revalidate_secret: str = ""
+
     # Paddle price IDs — JSON map {plan_id: paddle_price_id}, e.g.
     # {"plus_month":"pri_...","plus_year":"pri_..."}. Public (the client uses
     # them too), so set as a plain env var in deploy.yml, not Secret Manager.
@@ -165,6 +173,8 @@ class Config(BaseSettings):
             "brevo_api_key",
             "brevo_from_email",
             "telegram_bot_token",
+            "content_automation_key",
+            "revalidate_secret",
         ]
         for secret_name in secrets_to_load:
             if data.get(secret_name) is not None and secret_name in data:

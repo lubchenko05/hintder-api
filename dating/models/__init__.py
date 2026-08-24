@@ -1,6 +1,7 @@
 """SQLAlchemy ORM models. Import every model here so Alembic sees the metadata."""
 
 from dating.models.base import Base, metadata
+from dating.models.content import ContentPost, ContentSlugRedirect
 from dating.models.hint import HintConsumption, HintGrant
 from dating.models.match import Match
 from dating.models.paddle_event import PaddleEvent
@@ -12,6 +13,8 @@ __all__ = [
     "Base",
     "metadata",
     "User",
+    "ContentPost",
+    "ContentSlugRedirect",
     "HintConsumption",
     "HintGrant",
     "Match",

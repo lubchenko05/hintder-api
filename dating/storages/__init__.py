@@ -5,6 +5,7 @@ storage class directly — they receive ``DBStorage`` via ``get_db_storage`` and
 reach the sub-storage (``db.user``, ``db.hint``, …).
 """
 
+from dating.storages.content import ContentStorage
 from dating.storages.hints import HintStorage
 from dating.storages.matches import MatchStorage
 from dating.storages.paddle_events import PaddleEventStorage
@@ -23,6 +24,7 @@ class DBStorage:
         self.user = UserStorage(db_session)
         self.hint = HintStorage(db_session)
         self.match = MatchStorage(db_session)
+        self.content = ContentStorage(db_session)
         self.purchase = PurchaseStorage(db_session)
         self.paddle_event = PaddleEventStorage(db_session)
         self.subscription = SubscriptionStorage(db_session)

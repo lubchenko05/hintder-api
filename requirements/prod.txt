@@ -35,5 +35,12 @@ google-genai>=1.0.0
 # Cloud Storage — uploaded screenshots (30-day retention via bucket lifecycle)
 google-cloud-storage>=2.14.0
 
+# Content — markdown render + HTML sanitisation for guides/stories.
+# markdown-it-py is the same CommonMark+GFM engine the frontend used (remark),
+# so imported posts render byte-comparable HTML; nh3 is the allowlist gate.
+markdown-it-py>=3.0.0
+mdit-py-plugins>=0.4.0
+nh3>=0.2.17
+
 # Payments (Paddle) — mocked for now; uncomment when wiring the real SDK.
 # paddle-python-sdk>=1.13.0

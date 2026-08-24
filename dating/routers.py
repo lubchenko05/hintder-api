@@ -4,6 +4,8 @@ from fastapi import APIRouter, Response
 
 from dating.views.auth import router as auth_router
 from dating.views.billing import router as billing_router
+from dating.views.content_admin import router as content_admin_router
+from dating.views.content_public import router as content_public_router
 from dating.views.hints import router as hints_router
 from dating.views.legal import router as legal_router
 from dating.views.matches import router as matches_router
@@ -20,6 +22,8 @@ router_v1.include_router(matches_router, tags=["matches"])
 router_v1.include_router(billing_router, tags=["billing"])
 router_v1.include_router(paddle_webhook_router, tags=["paddle"])
 router_v1.include_router(legal_router, tags=["legal"])
+router_v1.include_router(content_public_router)
+router_v1.include_router(content_admin_router)
 
 router = APIRouter(prefix="/api")
 router.include_router(router_v1)
