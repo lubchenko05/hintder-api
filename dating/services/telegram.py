@@ -62,3 +62,16 @@ async def notify_subscription_created(email: str | None, plan: str, subscription
     """Operator ping when a brand-new subscription is activated."""
     display = email or "unknown"
     await send_alert(f"💰 <b>New subscription</b>\n\n👤 {display}\n📦 {plan}\n🔑 {subscription_id}")
+
+
+async def notify_content_published(
+    *, kind: str, title: str, url: str, indexnow: int | None, google: int | None
+) -> None:
+    """Operator ping when a guide/story goes live — replaces the jobs' own alert."""
+    label = "guide" if kind == "guides" else "story"
+    inx = indexnow if indexnow is not None else "fail"
+    ggl = google if google is not None else "fail"
+    await send_alert(
+        f"📝 <b>New hintder {label} live</b>\n\n{title}\n{url}\n\n"
+        f"• IndexNow: {inx}\n• Google: {ggl}"
+    )

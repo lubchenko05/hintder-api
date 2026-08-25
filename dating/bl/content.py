@@ -17,6 +17,7 @@ from dating.models.content import (
     KIND_GUIDES,
     STATUS_PUBLISHED,
 )
+from dating.services import indexing
 from dating.services.markdown import (
     estimate_read_minutes,
     render_markdown,
@@ -127,6 +128,7 @@ async def set_published(db: DBStorage, *, post_id: int, published: bool) -> Cont
     post = await db.content.update(post_id, data)
     if post is not None:
         await revalidate(post.kind, post.slug)
+        await submit_to_indexes(db, post, deleted=not published, announce=published)
     return post
 
 
@@ -138,6 +140,8 @@ async def archive_post(db: DBStorage, *, post_id: int) -> ContentPost | None:
     post = await db.content.update(post_id, {"status": "archived"})
     if post is not None:
         await revalidate(post.kind, post.slug)
+        # Tell Google the URL is gone so it drops out instead of going stale.
+        await submit_to_indexes(db, post, deleted=True, announce=False)
     return post
 
 
@@ -150,6 +154,7 @@ async def publish_due_scheduled(db: DBStorage) -> list[ContentPost]:
         if updated is not None:
             published.append(updated)
             await revalidate(updated.kind, updated.slug)
+            await submit_to_indexes(db, updated, deleted=False, announce=True)
     return published
 
 
@@ -192,3 +197,55 @@ async def revalidate(kind: str, slug: str) -> None:
 def default_kind() -> str:
     """The collection assumed when a caller omits one."""
     return KIND_GUIDES
+
+
+async def submit_to_indexes(
+    db: DBStorage, post: ContentPost, *, deleted: bool, announce: bool
+) -> tuple[int | None, int | None]:
+    """Submit a post's URL to IndexNow and Google; best effort, never raises.
+
+    Runs synchronously inside the admin request on purpose: there is no worker,
+    and Cloud Run throttles CPU once the response is sent, so a fire-and-forget
+    task would starve. The extra ~2 s lands on the jobs, not on users.
+
+    Skipped entirely when indexing is disabled (local/dev), when the post is
+    ``noindex``, and for ``repo-import`` rows — a re-import of 93 posts must not
+    burn the daily Google quota or spam the operator.
+    """
+    cfg = get_config()
+    if not cfg.indexing_enabled or post.noindex or post.source == "repo-import":
+        return None, None
+
+    url = post_url(post.kind, post.slug)
+    notification = indexing.URL_DELETED if deleted else indexing.URL_UPDATED
+
+    indexnow_code: int | None = None
+    google_code: int | None = None
+    try:
+        indexnow_code = await indexing.submit_indexnow([url])
+        google_code = await indexing.submit_google(url, notification)
+        ok = any(code is not None and code < 300 for code in (indexnow_code, google_code))
+        if ok and not deleted:
+            await db.content.mark_indexed(post.id)
+        if not ok:
+            logger.error(
+                "Indexing failed for %s (indexnow=%s google=%s)", url, indexnow_code, google_code
+            )
+    except Exception:
+        logger.exception("Indexing blew up for %s", url)
+
+    if announce and not deleted:
+        try:
+            from dating.services.telegram import notify_content_published
+
+            await notify_content_published(
+                kind=post.kind,
+                title=post.title,
+                url=url,
+                indexnow=indexnow_code,
+                google=google_code,
+            )
+        except Exception:
+            logger.exception("Telegram publish alert failed for %s", url)
+
+    return indexnow_code, google_code

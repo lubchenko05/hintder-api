@@ -129,6 +129,15 @@ class Config(BaseSettings):
     # ``TELEGRAM_OPERATOR_CHAT_ID`` above and cannot be overridden.
     telegram_bot_token: str = ""
 
+    # Search-engine indexing — fires from the backend after a publish. Off by
+    # default so local runs and tests never ping real engines; prod enables it
+    # via INDEXING_ENABLED in the deploy env.
+    indexing_enabled: bool = False
+    # Public by design (the key sits at a public URL on the site).
+    indexnow_key: str = "53c3c7b025d64b8687d46156e054f778"
+    # Verified Search Console owner of hintder.ai; the runtime SA impersonates it.
+    google_indexing_sa: str = "seeto-api@seeto-315cd.iam.gserviceaccount.com"
+
     # Content CMS — guides and stories live in this database, and the daily jobs
     # publish through the admin API with this key instead of committing markdown
     # and waiting for a deploy. Rotating it is a Secret Manager change, no release.

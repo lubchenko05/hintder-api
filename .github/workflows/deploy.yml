@@ -23,6 +23,7 @@ env:
     ENV=prod,
     GOOGLE_CLOUD_PROJECT=hintder-ai,
     FRONTEND_BASE_URL=https://hintder.ai,
+    INDEXING_ENABLED=true,
     BACKEND_BASE_URL=https://api.hintder.ai,
     POSTGRES_DB=dating,
     POSTGRES_USER=dating,
