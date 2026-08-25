@@ -8,6 +8,7 @@ from dating.models.paddle_event import PaddleEvent
 from dating.models.purchase import Purchase
 from dating.models.subscription import Subscription
 from dating.models.user import User
+from dating.models.webhook_delivery import WebhookDelivery
 
 __all__ = [
     "Base",
@@ -21,4 +22,5 @@ __all__ = [
     "Purchase",
     "PaddleEvent",
     "Subscription",
+    "WebhookDelivery",
 ]

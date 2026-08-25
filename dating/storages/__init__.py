@@ -12,6 +12,7 @@ from dating.storages.paddle_events import PaddleEventStorage
 from dating.storages.purchases import PurchaseStorage
 from dating.storages.subscriptions import SubscriptionStorage
 from dating.storages.users import UserStorage
+from dating.storages.webhook_deliveries import WebhookDeliveryStorage
 from dating.types import sessionmaker
 
 
@@ -25,6 +26,7 @@ class DBStorage:
         self.hint = HintStorage(db_session)
         self.match = MatchStorage(db_session)
         self.content = ContentStorage(db_session)
+        self.webhook_delivery = WebhookDeliveryStorage(db_session)
         self.purchase = PurchaseStorage(db_session)
         self.paddle_event = PaddleEventStorage(db_session)
         self.subscription = SubscriptionStorage(db_session)

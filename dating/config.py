@@ -138,6 +138,10 @@ class Config(BaseSettings):
     # Verified Search Console owner of hintder.ai; the runtime SA impersonates it.
     google_indexing_sa: str = "seeto-api@seeto-315cd.iam.gserviceaccount.com"
 
+    # SiteOps inbound webhook — HMAC secret minted by SiteOps (``whsec_…``),
+    # stored here so external publishes can be verified. Empty = endpoint off.
+    siteops_webhook_secret: str = ""
+
     # Content CMS — guides and stories live in this database, and the daily jobs
     # publish through the admin API with this key instead of committing markdown
     # and waiting for a deploy. Rotating it is a Secret Manager change, no release.
@@ -184,6 +188,7 @@ class Config(BaseSettings):
             "telegram_bot_token",
             "content_automation_key",
             "revalidate_secret",
+            "siteops_webhook_secret",
         ]
         for secret_name in secrets_to_load:
             if data.get(secret_name) is not None and secret_name in data:

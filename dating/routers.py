@@ -12,6 +12,7 @@ from dating.views.matches import router as matches_router
 from dating.views.paddle_webhook import router as paddle_webhook_router
 from dating.views.profile import router as profile_router
 from dating.views.reads import router as reads_router
+from dating.views.webhooks import router as webhooks_router
 
 router_v1 = APIRouter(prefix="/v1")
 router_v1.include_router(auth_router, tags=["auth"])
@@ -24,6 +25,7 @@ router_v1.include_router(paddle_webhook_router, tags=["paddle"])
 router_v1.include_router(legal_router, tags=["legal"])
 router_v1.include_router(content_public_router)
 router_v1.include_router(content_admin_router)
+router_v1.include_router(webhooks_router)
 
 router = APIRouter(prefix="/api")
 router.include_router(router_v1)
