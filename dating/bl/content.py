@@ -29,6 +29,10 @@ from dating.utils.datetime import utcnow
 logger = logging.getLogger(__name__)
 
 
+class _HeadNotReady(Exception):
+    """The live page is not rendering its own head yet, so indexing is skipped."""
+
+
 def post_path(kind: str, slug: str) -> str:
     """The site path a post lives at. One definition, used by URLs and revalidation."""
     return f"/{kind}/{slug}"
@@ -199,6 +203,35 @@ def default_kind() -> str:
     return KIND_GUIDES
 
 
+async def _head_is_correct(url: str, expected_canonical: str) -> bool | None:
+    """Fetch the live page and check its ``<head>`` really belongs to this post.
+
+    Guards a specific failure we hit in production: a slug that had been
+    requested before it existed kept the cached not-found shell, so the page
+    answered 200 with the post's body under the site's DEFAULT head — no
+    per-post title, no canonical — and we submitted exactly that to Google.
+
+    Returns ``True``/``False``, or ``None`` when the check itself could not run
+    (network trouble), which is not evidence of anything and is not reported as
+    a failure.
+    """
+    import httpx
+
+    marker = f'rel="canonical" href="{expected_canonical}"'
+    try:
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+            for attempt in range(3):
+                resp = await client.get(url)
+                if resp.status_code == 200 and marker in resp.text:
+                    return True
+                if attempt < 2:
+                    await asyncio.sleep(1.5)
+        return False
+    except Exception:
+        logger.exception("Head verification could not run for %s", url)
+        return None
+
+
 async def submit_to_indexes(
     db: DBStorage, post: ContentPost, *, deleted: bool, announce: bool
 ) -> tuple[int | None, int | None]:
@@ -219,9 +252,22 @@ async def submit_to_indexes(
     url = post_url(post.kind, post.slug)
     notification = indexing.URL_DELETED if deleted else indexing.URL_UPDATED
 
+    # Verify before we hand the URL to a search engine. Deletions skip it —
+    # the page is supposed to be gone.
+    # A syndicated post points its canonical elsewhere on purpose — check for
+    # the canonical the post actually declares, not the one we'd assume.
+    head_ok = None if deleted else await _head_is_correct(url, post.canonical_url or url)
+    if head_ok is False:
+        logger.error("Refusing to index %s — the live page is not rendering its own head", url)
+
     indexnow_code: int | None = None
     google_code: int | None = None
     try:
+        if head_ok is False:
+            # Submitting now would be asking Google to index a page whose head
+            # belongs to something else. Skipping costs a delay until the next
+            # publish/reindex; submitting costs a wrong title in the index.
+            raise _HeadNotReady(url)
         indexnow_code = await indexing.submit_indexnow([url])
         google_code = await indexing.submit_google(url, notification)
         ok = any(code is not None and code < 300 for code in (indexnow_code, google_code))
@@ -231,6 +277,8 @@ async def submit_to_indexes(
             logger.error(
                 "Indexing failed for %s (indexnow=%s google=%s)", url, indexnow_code, google_code
             )
+    except _HeadNotReady:
+        pass
     except Exception:
         logger.exception("Indexing blew up for %s", url)
 
@@ -244,6 +292,7 @@ async def submit_to_indexes(
                 url=url,
                 indexnow=indexnow_code,
                 google=google_code,
+                head_ok=head_ok,
             )
         except Exception:
             logger.exception("Telegram publish alert failed for %s", url)

@@ -65,10 +65,25 @@ async def notify_subscription_created(email: str | None, plan: str, subscription
 
 
 async def notify_content_published(
-    *, kind: str, title: str, url: str, indexnow: int | None, google: int | None
+    *,
+    kind: str,
+    title: str,
+    url: str,
+    indexnow: int | None,
+    google: int | None,
+    head_ok: bool | None = None,
 ) -> None:
     """Operator ping when a guide/story goes live — replaces the jobs' own alert."""
     label = "guide" if kind == "guides" else "story"
+    if head_ok is False:
+        # Say it loudly: the post is live but we deliberately did not index it.
+        await send_alert(
+            f"⚠️ <b>New hintder {label} live, NOT indexed</b>\n\n{title}\n{url}\n\n"
+            "The live page is serving the wrong &lt;head&gt; (no per-post canonical), "
+            "so it was not submitted to IndexNow or Google. Re-run reindex once the "
+            "page renders its own head."
+        )
+        return
     inx = indexnow if indexnow is not None else "fail"
     ggl = google if google is not None else "fail"
     await send_alert(
