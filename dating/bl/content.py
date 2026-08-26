@@ -80,6 +80,11 @@ async def upsert_post(
     prepared = _prepare(dict(data))
     post, created = await db.content.upsert(kind, slug, prepared)
     await revalidate(kind, slug)
+    # An upsert is a publish in its own right — the jobs create a post already
+    # marked published rather than creating a draft and flipping it — so it has
+    # to reach the search engines exactly like set_published does. Announce only
+    # a brand-new post; an edit shouldn't ping the operator.
+    await submit_to_indexes(db, post, deleted=False, announce=created)
     return post, created
 
 

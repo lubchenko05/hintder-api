@@ -99,6 +99,28 @@ async def unpublish_post(
     return AdminPostSerializer.model_validate(post)
 
 
+@router.post(
+    "/admin/content/posts/{post_id}/reindex",
+    response_model=AdminPostSerializer,
+    tags=["content-admin"],
+)
+async def reindex_post(
+    post_id: int, db: DBStorage = Depends(get_db_storage)
+) -> AdminPostSerializer:
+    """Push one post back through IndexNow + Google — the manual retry path.
+
+    Needed whenever a publish reached the site but not the engines: the head
+    verification refused it, or the post predates the wiring that submits on
+    upsert.
+    """
+    post = await db.content.get_by_id(post_id)
+    if post is None:
+        raise NotFoundException("Post not found")
+    await bl_content.submit_to_indexes(db, post, deleted=False, announce=False)
+    refreshed = await db.content.get_by_id(post_id)
+    return AdminPostSerializer.model_validate(refreshed)
+
+
 @router.delete(
     "/admin/content/posts/{post_id}", response_model=AdminPostSerializer, tags=["content-admin"]
 )

@@ -30,7 +30,12 @@ import yaml
 
 from dating.app import App
 from dating.config import get_config
-from dating.models.content import CONTENT_KINDS, SOURCE_IMPORT, STATUS_PUBLISHED
+from dating.models.content import (
+    CONTENT_KINDS,
+    SOURCE_AUTOMATION,
+    SOURCE_IMPORT,
+    STATUS_PUBLISHED,
+)
 from dating.services.markdown import estimate_read_minutes, render_markdown
 
 _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
@@ -124,6 +129,10 @@ def to_payload(kind: str, slug: str, row: dict[str, Any]) -> dict[str, Any]:
     payload = {k: v for k, v in row.items() if k != "body_html"}
     payload["kind"] = kind
     payload["slug"] = slug
+    # NOT ``repo-import``: that value marks the one-off bulk migration and tells
+    # the backend to skip indexing, which is right for re-importing 93 existing
+    # posts and exactly wrong for the daily job publishing a brand-new one.
+    payload["source"] = SOURCE_AUTOMATION
     published = payload.get("published_at")
     if published is not None:
         payload["published_at"] = published.isoformat()
