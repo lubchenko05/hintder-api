@@ -63,6 +63,9 @@ class PlanSerializer(BaseSerializer):
     is_unlimited: bool
     # Paddle price id the client opens checkout with (None until configured).
     paddle_price_id: str | None = None
+    # First-invoice discount that turns the recurring price into the promo price
+    # shown on the pricing page. Passed to Paddle.js alongside the price id.
+    paddle_discount_id: str | None = None
 
 
 class SubscribeValidator(BaseValidator):

@@ -31,11 +31,14 @@ router = APIRouter()
 @router.get("/billing/plans", response_model=list[PlanSerializer], tags=["billing"])
 async def list_plans() -> list[PlanSerializer]:
     """Return the subscription plan catalogue (public — no auth required)."""
-    price_map = get_config().paddle_price_map
+    cfg = get_config()
+    price_map = cfg.paddle_price_map
+    discount_map = cfg.paddle_discount_map
     plans = []
     for p in bl_plans.PLANS:
         s = PlanSerializer.model_validate(p)
         s.paddle_price_id = price_map.get(p.id)
+        s.paddle_discount_id = discount_map.get(p.id)
         plans.append(s)
     return plans
 

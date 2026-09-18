@@ -155,6 +155,13 @@ class Config(BaseSettings):
     # them too), so set as a plain env var in deploy.yml, not Secret Manager.
     paddle_price_ids: str = ""
 
+    # Paddle discount IDs — JSON map {plan_id: paddle_discount_id}. Each discount
+    # is flat, restricted to that plan's price and non-recurring, so it applies to
+    # the FIRST invoice only: the customer pays the promo price once, then the
+    # price's own recurring amount. Without this the promo price on the pricing
+    # page is a lie in the other direction — we'd charge full price from day one.
+    paddle_discount_ids: str = ""
+
     @model_validator(mode="before")
     @classmethod
     def load_from_env_and_secret_manager(cls, data: dict[str, Any]) -> dict[str, Any]:
@@ -183,6 +190,7 @@ class Config(BaseSettings):
             "paddle_webhook_secret",
             "paddle_environment",
             "paddle_price_ids",
+            "paddle_discount_ids",
             "brevo_api_key",
             "brevo_from_email",
             "telegram_bot_token",
@@ -241,6 +249,19 @@ class Config(BaseSettings):
             return {}
         try:
             data = json.loads(self.paddle_price_ids)
+        except Exception:
+            return {}
+        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+    @property
+    def paddle_discount_map(self) -> dict[str, str]:
+        """Parsed plan_id → paddle discount_id map (empty dict on missing/bad JSON)."""
+        import json
+
+        if not self.paddle_discount_ids:
+            return {}
+        try:
+            data = json.loads(self.paddle_discount_ids)
         except Exception:
             return {}
         return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}

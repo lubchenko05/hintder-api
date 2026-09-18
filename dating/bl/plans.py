@@ -59,6 +59,11 @@ class _TierSpec(NamedTuple):
     unlimited: bool
 
 
+# PROMO prices — what the customer pays for the FIRST period only, and what the
+# pricing page shows as the headline number. The recurring amount lives on the
+# Paddle price itself (2x these); a non-recurring Paddle discount bridges the
+# two on the first invoice. Changing a number here without changing the matching
+# Paddle price + discount will silently desync what we show from what we charge.
 # Keep in sync with the dating-next pricing page + Paddle. Yearly ≈ 2 months free.
 _TIERS: list[_TierSpec] = [
     _TierSpec(TIER_LITE, "Lite", 10, 4.99, 49.0, False),
