@@ -11,7 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 async def verify_firebase_token_and_upsert_user(
-    db: DBStorage, token: str, device_id: str | None = None
+    db: DBStorage,
+    token: str,
+    device_id: str | None = None,
+    client_ip: str | None = None,
+    user_agent: str | None = None,
 ) -> User:
     """Verify a Firebase ID token; create the user on first login else refresh.
 
@@ -49,7 +53,9 @@ async def verify_firebase_token_and_upsert_user(
         # new device). Anonymous bootstrap rows have no email and stay silent;
         # the anon→permanent upgrade is alerted in the refresh branch below.
         if email is not None:
-            await _notify_registration(email=email, name=name)
+            await _on_registration(
+                email=email, name=name, client_ip=client_ip, user_agent=user_agent
+            )
         return created
 
     # The anon→permanent upgrade lands here: the row was created anonymously
@@ -71,12 +77,22 @@ async def verify_firebase_token_and_upsert_user(
         if refreshed is not None:
             result = refreshed
     if is_registration:
-        await _notify_registration(email=email, name=name)
+        await _on_registration(email=email, name=name, client_ip=client_ip, user_agent=user_agent)
     return result
 
 
-async def _notify_registration(*, email: str | None, name: str | None) -> None:
-    """Best-effort operator alert on a new registration (never raises)."""
+async def _on_registration(
+    *,
+    email: str | None,
+    name: str | None,
+    client_ip: str | None = None,
+    user_agent: str | None = None,
+) -> None:
+    """Fan a new registration out to the operator and to Meta. Never raises.
+
+    Both are best effort and deliberately independent: a Telegram outage must
+    not cost us the ad conversion, and a Meta outage must not cost us the alert.
+    """
     try:
         # Local import: breaks the bl→services cycle and defers httpx.
         from dating.services.telegram import notify_new_user
@@ -84,3 +100,17 @@ async def _notify_registration(*, email: str | None, name: str | None) -> None:
         await notify_new_user(email=email, name=name)
     except Exception:
         logger.exception("Failed to send Telegram alert for new user")
+
+    try:
+        from dating.services.meta_capi import EVENT_COMPLETE_REGISTRATION, send_event
+
+        sent = await send_event(
+            EVENT_COMPLETE_REGISTRATION,
+            email=email,
+            client_ip=client_ip,
+            user_agent=user_agent,
+        )
+        if not sent:
+            logger.info("CompleteRegistration not reported to Meta for %s", email)
+    except Exception:
+        logger.exception("Failed to report CompleteRegistration to Meta")
