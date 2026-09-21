@@ -27,3 +27,8 @@ class JWTTokenSerializer(BaseSerializer):
 
     access_token: str
     token_type: str = "bearer"
+    # Whether this exchange was the moment the user registered, and the id the
+    # server used when reporting it to Meta. The browser fires the same pixel
+    # event with this id so the two are deduplicated rather than double-counted.
+    registered: bool = False
+    registration_event_id: str | None = None

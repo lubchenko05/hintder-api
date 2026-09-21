@@ -36,7 +36,7 @@ async def firebase_login(
     db: DBStorage = Depends(get_db_storage),
 ) -> JWTTokenSerializer:
     """Exchange a Firebase ID token for a backend JWT (creates the user if new)."""
-    user = await bl_auth.verify_firebase_token_and_upsert_user(
+    result = await bl_auth.verify_firebase_token_and_upsert_user(
         db,
         payload.token,
         device_id=payload.device_id,
@@ -45,8 +45,12 @@ async def firebase_login(
         client_ip=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
-    access_token = generate_jwt_for_user(user.id, user.email)
-    return JWTTokenSerializer(access_token=access_token)
+    access_token = generate_jwt_for_user(result.user.id, result.user.email)
+    return JWTTokenSerializer(
+        access_token=access_token,
+        registered=result.registration_event_id is not None,
+        registration_event_id=result.registration_event_id,
+    )
 
 
 @router.post("/auth/email-link", status_code=status.HTTP_204_NO_CONTENT, tags=["auth"])

@@ -1,6 +1,8 @@
 """Auth business logic: verify a Firebase token and upsert the user row."""
 
 import logging
+import uuid
+from dataclasses import dataclass
 
 from dating.config import get_config
 from dating.models.user import User
@@ -10,13 +12,28 @@ from dating.storages import DBStorage
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class LoginResult:
+    """The user, plus whether this exchange was the moment they registered.
+
+    The browser cannot work that out for itself: a magic-link sign-in lands on
+    a cold page load, so there is no earlier anonymous state in memory to
+    compare against and the front end silently skipped its sign-up event. The
+    server knows, so it says so — and hands back the id it reported to Meta,
+    so the pixel can fire the same event without it being counted twice.
+    """
+
+    user: User
+    registration_event_id: str | None = None
+
+
 async def verify_firebase_token_and_upsert_user(
     db: DBStorage,
     token: str,
     device_id: str | None = None,
     client_ip: str | None = None,
     user_agent: str | None = None,
-) -> User:
+) -> LoginResult:
     """Verify a Firebase ID token; create the user on first login else refresh.
 
     New users receive the configured free-hint grant — but only ONCE per device:
@@ -53,10 +70,16 @@ async def verify_firebase_token_and_upsert_user(
         # new device). Anonymous bootstrap rows have no email and stay silent;
         # the anon→permanent upgrade is alerted in the refresh branch below.
         if email is not None:
+            event_id = uuid.uuid4().hex
             await _on_registration(
-                email=email, name=name, client_ip=client_ip, user_agent=user_agent
+                email=email,
+                name=name,
+                client_ip=client_ip,
+                user_agent=user_agent,
+                event_id=event_id,
             )
-        return created
+            return LoginResult(created, event_id)
+        return LoginResult(created)
 
     # The anon→permanent upgrade lands here: the row was created anonymously
     # (no email) and now the linked token carries one. That first-email moment
@@ -77,8 +100,16 @@ async def verify_firebase_token_and_upsert_user(
         if refreshed is not None:
             result = refreshed
     if is_registration:
-        await _on_registration(email=email, name=name, client_ip=client_ip, user_agent=user_agent)
-    return result
+        event_id = uuid.uuid4().hex
+        await _on_registration(
+            email=email,
+            name=name,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            event_id=event_id,
+        )
+        return LoginResult(result, event_id)
+    return LoginResult(result)
 
 
 async def _on_registration(
@@ -87,6 +118,7 @@ async def _on_registration(
     name: str | None,
     client_ip: str | None = None,
     user_agent: str | None = None,
+    event_id: str,
 ) -> None:
     """Fan a new registration out to the operator and to Meta. Never raises.
 
@@ -107,6 +139,7 @@ async def _on_registration(
         sent = await send_event(
             EVENT_COMPLETE_REGISTRATION,
             email=email,
+            event_id=event_id,
             client_ip=client_ip,
             user_agent=user_agent,
         )
