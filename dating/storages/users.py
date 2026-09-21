@@ -3,6 +3,7 @@
 from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from dating.models.user import User
 from dating.storages.base import BaseStorage
@@ -39,7 +40,7 @@ class UserStorage(BaseStorage):
             result = await session.execute(stmt)
             return bool(result.scalar())
 
-    async def create(
+    async def get_or_create(
         self,
         user_id: str,
         *,
@@ -48,22 +49,50 @@ class UserStorage(BaseStorage):
         avatar: str | None = None,
         free_hints: int = 3,
         device_id: str | None = None,
-    ) -> User:
-        """Insert a new user with the given starter free-hint grant."""
-        async with self._begin() as session:
-            user = User(
+    ) -> tuple[User, bool]:
+        """Insert this user if absent. Returns the row and whether WE inserted it.
+
+        A browser routinely has several ``/auth/firebase`` calls in flight at
+        once — a retry, a second tab, a re-fired auth listener. Each one reads
+        "no such user" before any of them inserts, so a plain INSERT left the
+        losers raising IntegrityError and the endpoint answering 500. Because a
+        500 escapes before the CORS middleware runs, the browser reported it as
+        a CORS failure, which hid the real cause for a long time.
+
+        ON CONFLICT DO NOTHING lets a losing racer fall through and read the
+        winner's row instead. The flag matters to the caller: only the request
+        that actually inserted may announce a registration, or one sign-up
+        would alert the operator and bill Meta several times over.
+        """
+        now = utcnow()
+        stmt = (
+            pg_insert(User)
+            .values(
                 id=user_id,
                 email=email,
                 name=name,
                 avatar=avatar,
                 free_hints=free_hints,
+                sub_hints=0,
                 paid_hints=0,
                 device_id=device_id,
+                created_at=now,
+                updated_at=now,
             )
-            session.add(user)
-            await session.flush()
-            await session.refresh(user)
-            return user
+            # Scoped to the primary key: a clash on the unique email column is a
+            # different situation (same person, a second Firebase identity) and
+            # must not be silently swallowed here.
+            .on_conflict_do_nothing(index_elements=[User.id])
+            .returning(User.id)
+        )
+        async with self._begin() as session:
+            result = await session.execute(stmt)
+            inserted = result.scalar_one_or_none() is not None
+
+        user = await self.get_by_id(user_id)
+        if user is None:
+            raise NotFoundException(f"User {user_id} vanished between upsert and read")
+        return user, inserted
 
     async def update(self, user_id: str, data: dict[str, Any]) -> User | None:
         """Apply ``data`` (column→value), bump ``updated_at``; ``None`` if missing."""

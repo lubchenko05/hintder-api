@@ -57,7 +57,7 @@ async def verify_firebase_token_and_upsert_user(
             logger.info("Device %s already claimed free hints — granting 0 to %s", device_id, uid)
             grant = 0
         logger.info("Creating new user %s (grant=%d)", uid, grant)
-        created = await db.user.create(
+        fresh, we_inserted = await db.user.get_or_create(
             uid,
             email=email,
             name=name,
@@ -65,21 +65,26 @@ async def verify_firebase_token_and_upsert_user(
             free_hints=grant,
             device_id=device_id,
         )
-        # Only ping the operator for a REAL registration — a fresh row that
-        # already carries an email (e.g. signing into an existing account on a
-        # new device). Anonymous bootstrap rows have no email and stay silent;
-        # the anon→permanent upgrade is alerted in the refresh branch below.
-        if email is not None:
-            event_id = uuid.uuid4().hex
-            await _on_registration(
-                email=email,
-                name=name,
-                client_ip=client_ip,
-                user_agent=user_agent,
-                event_id=event_id,
-            )
-            return LoginResult(created, event_id)
-        return LoginResult(created)
+        if we_inserted:
+            # Only ping the operator for a REAL registration — a fresh row that
+            # already carries an email (e.g. signing into an existing account on
+            # a new device). Anonymous bootstrap rows have no email and stay
+            # silent; the anon→permanent upgrade is alerted in the branch below.
+            if email is not None:
+                event_id = uuid.uuid4().hex
+                await _on_registration(
+                    email=email,
+                    name=name,
+                    client_ip=client_ip,
+                    user_agent=user_agent,
+                    event_id=event_id,
+                )
+                return LoginResult(fresh, event_id)
+            return LoginResult(fresh)
+        # A concurrent call for this same uid got there first. Its row is the
+        # real one; carry on as though we had read it, so this request still
+        # returns a usable session instead of failing.
+        existing = fresh
 
     # The anon→permanent upgrade lands here: the row was created anonymously
     # (no email) and now the linked token carries one. That first-email moment
