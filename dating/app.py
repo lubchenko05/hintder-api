@@ -16,6 +16,11 @@ from dating.types import sessionmaker
 
 logger = logging.getLogger(__name__)
 
+# httpx logs every outbound request URL at INFO. Telegram puts the bot token in
+# the URL path (/bot<token>/sendMessage), so each alert wrote a live credential
+# into Cloud Run logs. Keep httpx to warnings and errors.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 class Inj:
     """Minimal string-keyed dependency-injection container."""

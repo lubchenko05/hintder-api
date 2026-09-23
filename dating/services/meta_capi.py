@@ -79,10 +79,13 @@ async def send_event(
             }
         ]
     }
-    url = f"{_GRAPH}/{cfg.meta_dataset_id}/events?access_token={cfg.meta_capi_token}"
+    # The token rides in the body, not the query string: httpx logs every
+    # request URL at INFO, and a query-string token landed verbatim in Cloud
+    # Run logs, readable by anyone with log access to the project.
+    url = f"{_GRAPH}/{cfg.meta_dataset_id}/events"
     try:
         async with httpx.AsyncClient(timeout=6.0) as client:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, json={**payload, "access_token": cfg.meta_capi_token})
         if resp.status_code >= 300:
             logger.error("CAPI %s rejected (%s): %s", event_name, resp.status_code, resp.text[:300])
             return False
